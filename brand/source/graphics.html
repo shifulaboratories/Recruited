@@ -1,0 +1,62 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="../tokens/tokens.css">
+<style>
+*{box-sizing:border-box;margin:0}
+html,body{background:transparent}
+body{font-family:var(--rt-font-sans);font-feature-settings:"cv02","cv03","cv04","cv11","ss01";-webkit-font-smoothing:antialiased;color:var(--rt-foreground)}
+.frame{position:relative;overflow:hidden;background:var(--rt-background);display:flex;align-items:center;gap:56px}
+.frame::before{content:"";position:absolute;inset:0;background:repeating-linear-gradient(135deg,transparent 0 9px,color-mix(in oklch,var(--rt-foreground) 3.5%,transparent) 9px 10px);pointer-events:none}
+.banner{width:1280px;height:440px;padding:0 64px;border-radius:22px}
+.social{width:1280px;height:640px;padding:0 80px}
+.left{position:relative;flex:1;min-width:0}
+.lock{display:flex;align-items:center;gap:13px;font-weight:600;font-size:22px;letter-spacing:-.012em}
+.lock svg{width:30px;height:30px}
+.lock .tld{color:var(--rt-muted)}
+h1{font-weight:600;letter-spacing:-.045em;line-height:1.04;margin-top:30px;font-size:46px;white-space:nowrap}
+.social h1{font-size:56px;margin-top:40px;white-space:normal}
+h1 span{display:block;color:var(--rt-muted)}
+p.sub{margin-top:22px;font-size:17px;line-height:1.55;color:var(--rt-muted);max-width:500px}
+.social p.sub{font-size:19px;max-width:560px;margin-top:28px}
+.chips{display:flex;gap:8px;margin-top:28px}
+.chip{border:1px solid var(--rt-border);border-radius:999px;padding:6px 13px;font-size:14px;font-weight:500;background:var(--rt-surface)}
+.chip b{font-family:var(--rt-font-mono);font-weight:500;color:var(--rt-primary)}
+.card{position:relative;width:500px;flex:none;background:var(--rt-surface);border:1px solid var(--rt-border);border-radius:18px;padding:22px 24px;box-shadow:0 1px 2px rgb(0 0 0/.06),0 12px 40px -12px rgb(0 0 0/.25)}
+.social .card{width:500px}
+.ask{display:flex;gap:10px;align-items:flex-start;font-size:14px}
+.ask .you{flex:none;font-family:var(--rt-font-mono);font-size:11px;color:var(--rt-faint);padding-top:2px;letter-spacing:.06em}
+.call{margin-top:10px;font-family:var(--rt-font-mono);font-size:12px;background:var(--rt-subtle);border-radius:8px;padding:8px 10px;color:var(--rt-muted)}
+.call b{color:var(--rt-primary);font-weight:500}
+hr{border:0;border-top:1px dashed var(--rt-border);margin:16px 0}
+.row{display:flex;justify-content:space-between;align-items:baseline}
+.q{font-size:12px;color:var(--rt-faint);font-family:var(--rt-font-mono);letter-spacing:.04em;text-transform:uppercase}
+.name{font-weight:600;font-size:15px}
+.tier{font-size:12px;font-weight:600;color:var(--rt-tier-a);background:color-mix(in oklch,var(--rt-tier-a) 15%,transparent);padding:2px 8px;border-radius:999px;margin-left:8px}
+.ans{margin-top:8px;font-size:13.5px;line-height:1.55;color:var(--rt-muted)}
+.ans .t{color:var(--rt-foreground)}
+.ans .p{color:var(--rt-foreground);background:color-mix(in oklch,var(--rt-pasted) 20%,transparent);border-radius:3px;box-shadow:0 0 0 2px color-mix(in oklch,var(--rt-pasted) 20%,transparent)}
+.ans .a{color:var(--rt-foreground);background:color-mix(in oklch,var(--rt-ai) 20%,transparent);border-radius:3px;box-shadow:0 0 0 2px color-mix(in oklch,var(--rt-ai) 20%,transparent)}
+.bar{display:flex;height:8px;border-radius:99px;overflow:hidden;margin-top:14px;gap:2px}
+.bar i{display:block}
+.legend{display:flex;gap:16px;margin-top:10px;font-size:12.5px;color:var(--rt-muted)}
+.legend span::before{content:"";display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:6px;background:var(--c)}
+.legend b{color:var(--rt-foreground);font-weight:500;font-variant-numeric:tabular-nums}
+</style></head><body>
+<script>
+const q=new URLSearchParams(location.search);document.documentElement.dataset.theme=q.get('theme')||'dark';const kind=q.get('kind')||'banner';
+const social=kind==='social';
+document.write(`<div class="frame ${kind}"><div class="left">
+<div class="lock"><svg viewBox="0 0 64 64"><rect width="64" height="64" rx="15" fill="var(--rt-foreground)"/><circle cx="32" cy="24" r="8" fill="var(--rt-background)"/><rect x="16" y="37" width="32" height="7" rx="3.5" fill="var(--rt-background)"/><rect x="22" y="47" width="20" height="5" rx="2.5" fill="var(--rt-background)" opacity=".55"/></svg><span>recruited<span class="tld">.tools</span></span></div>
+<h1>Hire from a conversation.<span>Know who wrote the answers.</span></h1>
+<p class="sub">The open-source ATS that runs on MCP. Post a role to every board, send screening forms, and see which answers were typed, pasted or written with AI.</p>
+${social?`<div class="chips"><div class="chip">Open source</div><div class="chip">Self-host free</div><div class="chip"><b>/mcp</b> for any assistant</div></div>`:''}
+</div>
+<div class="card">
+<div class="ask"><span class="you">YOU</span><span>Who's worth a call for the support lead role?</span></div>
+<div class="call"><b>rank_applicants</b>(role: "Support Lead", tier: "A")</div>
+<hr>
+<div class="row"><span class="q">Q3 · A customer you turned around</span></div>
+<div class="row" style="margin-top:8px"><span class="name">Applicant 0142<span class="tier">A-tier</span></span><span class="q" style="text-transform:none">4m 12s</span></div>
+<p class="ans"><span class="t">A clinic owner had been double-billed twice and wanted out. I called instead of replying,</span> <span class="p">refunded both charges the same hour</span><span class="t">, and stayed on until the next invoice cleared.</span> <span class="a">This proactive approach fostered lasting trust.</span></p>
+<div class="bar"><i style="flex:71;background:var(--rt-typed)"></i><i style="flex:18;background:var(--rt-pasted)"></i><i style="flex:11;background:var(--rt-ai)"></i></div>
+<div class="legend"><span style="--c:var(--rt-typed)">Typed <b>71%</b></span><span style="--c:var(--rt-pasted)">Pasted <b>18%</b></span><span style="--c:var(--rt-ai)">Likely AI <b>11%</b></span></div>
+</div></div>`);
+</script></body></html>

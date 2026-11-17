@@ -1,0 +1,23 @@
+/** Tailwind v4: @import "./tokens.css"; then paste this @theme block into globals.css. */
+@theme inline {
+  --color-rt-background: var(--rt-background);
+  --color-rt-surface: var(--rt-surface);
+  --color-rt-subtle: var(--rt-subtle);
+  --color-rt-border: var(--rt-border);
+  --color-rt-foreground: var(--rt-foreground);
+  --color-rt-muted: var(--rt-muted);
+  --color-rt-faint: var(--rt-faint);
+  --color-rt-primary: var(--rt-primary);
+  --color-rt-primary-tint: var(--rt-primary-tint);
+  --color-rt-tier-a: var(--rt-tier-a);
+  --color-rt-tier-b: var(--rt-tier-b);
+  --color-rt-tier-c: var(--rt-tier-c);
+  --color-rt-typed: var(--rt-typed);
+  --color-rt-pasted: var(--rt-pasted);
+  --color-rt-ai: var(--rt-ai);
+  --color-rt-destructive: var(--rt-destructive);
+  --color-rt-success: var(--rt-success);
+  --color-rt-warning: var(--rt-warning);
+  --font-sans: var(--rt-font-sans);
+  --font-mono: var(--rt-font-mono);
+}

@@ -1,0 +1,67 @@
+import { baseUrl, requireUser } from "@/lib/auth";
+import { mcpPath, primaryConnection } from "@/lib/data/connections";
+import { rotateConnection, saveAccount } from "@/server/actions";
+import { ActionForm, CopyButton } from "@/components/forms";
+import { TOOLS } from "@/lib/mcp/tools";
+
+export const metadata = { title: "Connect Claude" };
+
+export default async function SettingsPage() {
+  const user = await requireUser();
+  const conn = await primaryConnection(user.id);
+  const url = `${await baseUrl()}${mcpPath(conn.token)}`;
+  return (
+    <div className="space-y-8 max-w-2xl">
+      <header>
+        <p className="eyebrow">Settings</p>
+        <h1 className="text-2xl font-semibold tracking-tight">Connect Claude</h1>
+        <p className="text-rt-muted mt-1">
+          Recruited is built to be run from a conversation. Add this URL as a custom connector and Claude gets {TOOLS.length} tools: writing
+          listings for each board, building forms, reading applicants and moving them along.
+        </p>
+      </header>
+      <section className="card p-5 space-y-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <code className="text-xs bg-rt-subtle rounded px-2 py-1 break-all flex-1">{url}</code>
+          <CopyButton text={url} label="Copy URL" />
+        </div>
+        <ol className="list-decimal pl-5 text-rt-muted space-y-1">
+          <li>
+            In Claude, open{" "}
+            <a className="link" href="https://claude.ai/customize/connectors" target="_blank" rel="noreferrer">
+              Connectors
+            </a>{" "}
+            and choose Add custom connector.
+          </li>
+          <li>Paste the URL. No sign-in is needed: the URL is the key, so treat it like a password.</li>
+          <li>Ask: &ldquo;I&apos;m hiring a part-time bookkeeper. Post it on OnlineJobs.ph.&rdquo;</li>
+        </ol>
+        <form action={rotateConnection.bind(null, conn.id)}>
+          <button className="text-xs text-rt-muted hover:text-rt-foreground">Make a new URL (the old one stops working)</button>
+        </form>
+      </section>
+
+      <section className="card p-5">
+        <h2 className="font-semibold mb-3">Your account</h2>
+        <ActionForm action={saveAccount} submit="Save">
+          <label className="block space-y-1">
+            <span className="text-rt-muted">Company name, shown on every apply page</span>
+            <input className="field" name="companyName" defaultValue={user.companyName} />
+          </label>
+          <label className="block space-y-1">
+            <span className="text-rt-muted">Your name</span>
+            <input className="field" name="name" defaultValue={user.name} />
+          </label>
+          <label className="block space-y-1">
+            <span className="text-rt-muted">Email</span>
+            <input className="field" name="email" defaultValue={user.email} />
+          </label>
+          <label className="block space-y-1">
+            <span className="text-rt-muted">New password (leave empty to keep it)</span>
+            <input className="field" name="password" type="password" autoComplete="new-password" />
+          </label>
+        </ActionForm>
+      </section>
+    </div>
+  );
+}
