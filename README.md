@@ -38,6 +38,10 @@ npm run build && npm start
 
 `DATABASE_URL` is the only setting. On first start the server prints an owner email and password once; change both under Connect Claude → Your account.
 
+## Deploying it
+
+`docker compose up -d` runs it with its own Postgres, and `railway.json` deploys it on Railway with a Postgres beside it. Both are in [docs/DEPLOY.md](docs/DEPLOY.md).
+
 ## Working on it
 
 Read [CLAUDE.md](CLAUDE.md) first. The plan and what's next are in [docs/PLAN.md](docs/PLAN.md); the brand is in [brand/BRAND.md](brand/BRAND.md).
