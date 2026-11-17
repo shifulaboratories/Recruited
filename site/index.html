@@ -3,155 +3,754 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Recruited: hire from a conversation</title>
+<title>Recruited — hire from a conversation</title>
 <meta name="description" content="An open-source applicant tracking system for small teams hiring their first people. Post a role to every board, send screening forms, and see which answers were typed, pasted or likely written with AI. Runs from Claude over MCP.">
-<meta name="theme-color" content="#F9FAFB">
-<meta property="og:title" content="Recruited: hire from a conversation">
+<meta name="theme-color" content="#f9f9fa">
+<meta property="og:title" content="Recruited — hire from a conversation">
 <meta property="og:description" content="Post a role to every board, send screening forms, and see which answers were typed, pasted or likely written with AI.">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Recruited">
 <meta property="og:image" content="og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600&family=JetBrains+Mono:wght@400;500&display=swap">
-<link rel="stylesheet" href="tokens.css">
 <link rel="stylesheet" href="styles.css">
+<style>
+  /* An <svg> with no width/height falls back to 300x150; this holds even if
+     styles.css is slow or missing. */
+  svg:not([width]) { width: 1em; height: 1em; }
+</style>
+<script>
+  /* Opts the page into being animated. Without it the page is simply finished. */
+  document.documentElement.className += " js";
+</script>
 </head>
 <body>
-<header class="wrap nav">
-  <a class="brand" href="./" aria-label="recruited.tools">
-    <svg viewBox="0 0 64 64" width="26" height="26" aria-hidden="true"><rect width="64" height="64" rx="15" fill="currentColor"/><circle cx="32" cy="24" r="8" class="cut"/><rect x="16" y="37" width="32" height="7" rx="3.5" class="cut"/><rect x="22" y="47" width="20" height="5" rx="2.5" class="cut" opacity=".55"/></svg>
-    <span>recruited<span class="muted">.tools</span></span>
-  </a>
-  <nav>
-    <a href="#how">How it works</a>
-    <a href="#provenance">Provenance</a>
-    <a href="#faq">Questions</a>
-    <a class="btn" href="https://github.com/shifulaboratories/Recruited">GitHub</a>
-  </nav>
+<!-- Icons: Lucide geometry, the same set hired.tools and the app use. -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <defs>
+    <g id="i-clock" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></g>
+    <g id="i-chat" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z"/></g>
+    <g id="i-search" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></g>
+    <g id="i-right" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></g>
+    <g id="i-check" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></g>
+    <g id="i-no" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m4.9 4.9 14.2 14.2"/></g>
+    <g id="i-link" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M9 17H7A5 5 0 0 1 7 7h2"/><path d="M15 7h2a5 5 0 1 1 0 10h-2"/><path d="M8 12h8"/></g>
+    <g id="i-out" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></g>
+    <g id="i-term" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><path d="M12 19h8"/></g>
+    <g id="i-lock" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></g>
+    <g id="i-layers" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="m12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"/><path d="m6.08 10.37-3.5 1.6a1 1 0 0 0 0 1.81l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9a1 1 0 0 0 0-1.83l-3.5-1.59"/></g>
+    <g id="i-gh"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.42 7.42 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></g>
+    <g id="i-shifu"><path fill="currentColor" d="M61 2L35 2L35 94L61 94ZM94.34 36.26L81.34 13.74L1.66 59.74L14.66 82.26ZM81.34 82.26L94.34 59.74L14.66 13.74L1.66 36.26Z"/></g>
+    <g id="i-in" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"/><rect width="4" height="12" x="2" y="9"/><circle cx="4" cy="4" r="2"/></g>
+    <g id="i-ig" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="20" x="2" y="2" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><path d="M17.5 6.5h.01"/></g>
+    <g id="i-x"><path fill="currentColor" d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231Zm-1.161 17.52h1.833L7.084 4.126H5.117Z"/></g>
+  </defs>
+</svg>
+
+<div class="progress" role="presentation"></div>
+
+<header class="nav">
+  <div class="nav-rail">
+    <div class="nav-inner">
+      <a class="brand" href="./" aria-label="Recruited, home">
+        <span class="mark3d" data-mark3d="24">
+          <svg width="24" height="24" viewBox="0 0 64 64" aria-hidden="true">
+            <rect width="64" height="64" rx="15" fill="var(--brand-tile, #191A1E)"/>
+            <circle cx="32" cy="24" r="8" fill="var(--brand-cut, #F9F9FA)"/>
+            <rect x="16" y="37" width="32" height="7" rx="3.5" fill="var(--brand-cut, #F9F9FA)"/>
+            <rect x="22" y="47" width="20" height="5" rx="2.5" fill="var(--brand-cut, #F9F9FA)" opacity=".55"/>
+          </svg>
+        </span>
+        Recruited
+      </a>
+      <nav class="nav-links" aria-label="Main">
+        <a class="link" href="#features">Features</a>
+        <a class="link" href="#provenance">Provenance</a>
+        <a class="link" href="#tools">How it works</a>
+        <a class="link" href="#self-host">Self-host</a>
+      </nav>
+      <div class="nav-acts">
+        <a class="gh" href="https://github.com/shifulaboratories/Recruited" rel="noopener" aria-label="Recruited on GitHub" title="Recruited on GitHub">
+          <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><use href="#i-gh"/></svg>
+        </a>
+        <a class="btn btn-primary btn-sm" data-magnet href="https://github.com/shifulaboratories/Recruited/blob/main/docs/DEPLOY.md" rel="noopener">Run your own</a>
+      </div>
+      <details class="nav-menu">
+        <summary aria-label="Menu">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+        </summary>
+        <div class="nav-sheet">
+          <a href="#features">Features</a>
+          <a href="#provenance">Provenance</a>
+          <a href="#tools">How it works</a>
+          <a href="#self-host">Self-host</a>
+          <a href="https://github.com/shifulaboratories/Recruited" rel="noopener">GitHub</a>
+          <hr class="fold">
+          <a class="btn btn-primary btn-sm" href="https://github.com/shifulaboratories/Recruited/blob/main/docs/DEPLOY.md" rel="noopener">Run your own</a>
+        </div>
+      </details>
+    </div>
+  </div>
 </header>
 
 <main>
-  <section class="wrap hero">
-    <p class="eyebrow">Open-source ATS · runs on MCP</p>
-    <h1>Hire from a conversation.<br><span class="muted">Know who wrote the answers.</span></h1>
-    <p class="lede">Recruited is an applicant tracking system for small teams hiring their first people. Tell Claude what you're hiring for. It writes the job, the application form, and a listing in each board's own format, each with its own apply link. Applicants fill in the form, and every written answer records how it got there.</p>
-    <div class="ctas">
-      <a class="btn btn-primary" href="https://github.com/shifulaboratories/Recruited/blob/main/docs/DEPLOY.md">Run your own</a>
-      <a class="btn" href="https://github.com/shifulaboratories/Recruited">Read the code</a>
+<!-- ==========================================================================
+     HERO — the conversation, and the applicant it produced.
+     Every tool named in the transcript is real and callable.
+     ========================================================================== -->
+<section class="hero">
+  <div class="hero-grid" aria-hidden="true"></div>
+  <div class="hero-glow" aria-hidden="true"></div>
+  <div class="wrap">
+    <div class="hero-lead">
+      <h1 class="h-display hero-copy" data-words>
+        Hire from a <span class="accent">conversation</span>
+      </h1>
+      <p class="lede" data-reveal style="--i:1">
+        Recruited is an applicant tracking system for small teams hiring their first people.
+        Tell your assistant who you need. It writes the job, the form, and a listing for every
+        board, and each answer that comes back shows how it got there.
+      </p>
+      <div class="hero-ctas" data-reveal style="--i:2">
+        <a class="btn btn-primary" data-magnet="4" href="https://github.com/shifulaboratories/Recruited/blob/main/docs/DEPLOY.md" rel="noopener">
+          Run your own
+          <svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-right"/></svg>
+        </a>
+        <a class="btn btn-ghost" href="https://github.com/shifulaboratories/Recruited" rel="noopener">
+          <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true"><use href="#i-gh"/></svg>
+          Read the code
+        </a>
+      </div>
+      <p class="hero-who" data-reveal style="--i:3">
+        For founders and small teams making their first hires, who would rather say what they
+        need than learn an enterprise ATS.
+      </p>
+      <p class="hero-note" data-reveal style="--i:4">
+        <span class="works">
+          Built for
+          <span class="c"><img class="mark" src="media/clients/claude.png" alt="" width="16" height="16" decoding="async">Claude</span>
+          and any client that speaks MCP
+        </span>
+      </p>
     </div>
 
-    <figure class="card demo" aria-label="An example answer, with how it arrived">
-      <div class="demo-head">
-        <span class="chip tier-a">A</span>
-        <div>
-          <div class="strong">Operations virtual assistant</div>
-          <div class="faint mono small">via OnlineJobs.ph · listing B</div>
+    <div class="stage">
+      <div class="panel" data-reveal="left" style="--i:5">
+        <div class="panel-head">
+          <span class="eyebrow">Claude · connected to Recruited</span>
+          <span class="dotline" aria-hidden="true"><i></i><i></i><i></i></span>
         </div>
-        <span class="chip qual">met must-haves</span>
+        <div class="tape" data-tape>
+          <div class="turn you" data-step="1" data-pause="420">
+            <div class="who">You</div>
+            <div class="said" data-type>I'm hiring an operations VA, full time, PHP 30–40k a month. Post it on OnlineJobs.ph and LinkedIn.</div>
+          </div>
+          <div class="turn" data-step="2" data-pause="620">
+            <div class="who">Recruited</div>
+            <div>
+              <div class="said" data-type>Drafted the job, a six-question form with two must-haves, and a listing for each board in its own format. What hours should they say? I won't guess.</div>
+              <div class="calls">
+                <span class="call" style="--i:0"><i></i>get_board_guide</span>
+                <span class="call" style="--i:1"><i></i>create_job</span>
+                <span class="call" style="--i:2"><i></i>set_application_form</span>
+                <span class="call" style="--i:3"><i></i>create_listing</span>
+              </div>
+            </div>
+          </div>
+          <div class="turn you" data-step="3" data-pause="420">
+            <div class="who">You</div>
+            <div class="said" data-type>9 to 6 Manila time. A week later: who's worth a call?</div>
+          </div>
+          <div class="turn" data-step="4">
+            <div class="who">Recruited</div>
+            <div>
+              <div class="said" data-type>41 applied, 6 proposed for A tier with a reason each. Maria Santos is first. Most of her answers were typed; one paragraph was pasted.</div>
+              <div class="calls">
+                <span class="call" style="--i:0"><i></i>list_applications</span>
+                <span class="call" style="--i:1"><i></i>rank_applicants</span>
+                <span class="call" style="--i:2"><i></i>get_application</span>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
-      <p class="q">Tell us about a process you set up that someone else still uses.</p>
-      <p class="a"><span class="hl-typed">I set up the refund queue for a 12-person support team: one shared inbox, three labels, and a rule that nothing waits more than a day.</span> <span class="hl-pasted">The labels map to our three refund policies and each has a saved reply.</span></p>
-      <div class="bar" role="img" aria-label="74 percent typed, 26 percent pasted">
-        <span style="width:74%" class="b-typed"></span><span style="width:26%" class="b-pasted"></span>
+
+      <!-- One applicant, as the app shows them: the tier, the must-haves, and
+           each written answer marked by how it reached the form. The marks
+           draw in after the frame arrives. -->
+      <figure class="frame shot" data-reveal="right" style="--i:6">
+        <div class="frame-bar">
+          <span class="frame-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+          <span class="frame-url"><span>Operations VA · Applicants · Maria Santos</span></span>
+        </div>
+        <div class="apl">
+          <div class="apl-head">
+            <span class="apl-tier">A</span>
+            <span class="apl-who">
+              <span class="apl-name">Maria Santos</span>
+              <span class="apl-meta">via OnlineJobs.ph · listing B</span>
+            </span>
+            <span class="apl-pill" style="--tone:var(--success)">
+              <svg width="12" height="12" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-check"/></svg>
+              Met must-haves
+            </span>
+          </div>
+          <p class="apl-why">Proposed A: four years running a support queue, set up a refund process still in use, available 9 to 6 Manila.</p>
+
+          <div class="apl-qa">
+            <p class="apl-q">Tell us about a process you set up that someone else still uses.</p>
+            <p class="apl-a"><span class="pv pv-typed" style="--i:0">I set up the refund queue for a 12-person support team: one shared inbox, three labels, and a rule that nothing waits more than a day.</span> <span class="pv pv-pasted" style="--i:1">The labels map to our three refund policies and each has a saved reply.</span></p>
+            <div class="pv-bar" role="img" aria-label="74 percent typed, 26 percent pasted">
+              <span style="--w:74%; --pv:var(--typed); --i:0"></span><span style="--w:26%; --pv:var(--pasted); --i:1"></span>
+            </div>
+          </div>
+
+          <div class="apl-qa">
+            <p class="apl-q">Why this role?</p>
+            <p class="apl-a"><span class="pv pv-ai" style="--i:2">I am passionate about leveraging my skills to drive operational excellence and deliver seamless experiences.</span></p>
+            <div class="pv-bar" role="img" aria-label="100 percent typed, labelled likely AI">
+              <span style="--w:100%; --pv:var(--ai); --i:2"></span>
+            </div>
+            <p class="pv-hint" style="--i:3"><span class="pv-dot" style="--pv:var(--ai)"></span>Typed, but likely AI: stock phrasing, one sentence, no specifics.</p>
+          </div>
+
+          <div class="pv-legend">
+            <span><span class="pv-dot" style="--pv:var(--typed)"></span>Typed</span>
+            <span><span class="pv-dot" style="--pv:var(--pasted)"></span>Pasted</span>
+            <span><span class="pv-dot" style="--pv:var(--ai)"></span>Likely AI</span>
+            <span class="fill"></span>
+            <span class="pv-note">Observation, not proof</span>
+          </div>
+        </div>
+      </figure>
+    </div>
+  </div>
+</section>
+
+<div class="wrap"><hr class="fold" style="margin-top:24px"></div>
+
+<!-- ==========================================================================
+     THE PROBLEM
+     ========================================================================== -->
+<section class="band">
+  <div class="wrap">
+    <div class="why">
+      <div class="section-head" data-reveal>
+        <p class="eyebrow">Why it exists</p>
+        <h2 class="h-section">Every board wants its own listing. Every answer might be <span class="accent">someone else's</span>.</h2>
+        <p class="lede">
+          A first hire at a small company usually goes like this: one job description rewritten
+          for five boards, a spreadsheet of applicants copied out of each, and two hundred
+          answers to &ldquo;why this role&rdquo; that read the same. The big ATSs fix the first
+          two for teams with a recruiter. Nobody fixes the third honestly. A detector that
+          calls people cheats is wrong too often to trust; what helps is seeing how each answer
+          reached the form, and reading it yourself.
+        </p>
       </div>
-      <div class="legend small">
-        <span><i class="dot d-typed"></i>Typed 74%</span>
-        <span><i class="dot d-pasted"></i>Pasted 26%, after 40 seconds away from the page</span>
-        <span><i class="dot d-ai"></i>No signs of AI writing</span>
+      <div class="files" data-tilt="9" data-reveal="scale" style="--i:1" aria-hidden="true">
+        <div class="files-stage">
+          <div class="file file-theirs">
+            <p class="file-cap">
+              <svg width="12" height="12" viewBox="0 0 24 24"><use href="#i-layers"/></svg>
+              What the boards want
+            </p>
+            <div class="file-rows">
+              <span style="--w:100%; --i:0"></span>
+              <span style="--w:84%; --i:1"></span>
+              <span style="--w:95%; --i:2"></span>
+              <span style="--w:72%; --i:3"></span>
+              <span style="--w:100%; --i:4"></span>
+              <span style="--w:88%; --i:5"></span>
+              <span style="--w:96%; --i:6"></span>
+              <span style="--w:64%; --i:7"></span>
+              <span style="--w:92%; --i:8"></span>
+              <span style="--w:78%; --i:9"></span>
+            </div>
+            <p class="file-foot">6 boards<span class="roomy"> &middot; 6 sets of rules</span></p>
+          </div>
+          <div class="file file-yours">
+            <p class="file-cap">What you have</p>
+            <div class="file-rows">
+              <span style="--w:76%; --i:0"></span>
+              <span class="none" style="--w:100%; --i:1"></span>
+              <span style="--w:48%; --i:2"></span>
+              <span class="none" style="--w:100%; --i:3"></span>
+            </div>
+            <p class="file-foot">one job description, somewhere</p>
+          </div>
+        </div>
       </div>
-      <figcaption class="faint small">An illustrative example, not real applicant data.</figcaption>
-    </figure>
-  </section>
+    </div>
+  </div>
+</section>
 
-  <section class="wrap" id="how">
-    <p class="eyebrow">What it does</p>
-    <h2>Everything a first hire needs.<br><span class="muted">Nothing a talent team would.</span></h2>
-    <div class="grid">
-      <article class="card">
-        <h3>One role, every board</h3>
-        <p>Board guides for LinkedIn, Indeed, OnlineJobs.ph, Wellfound, Upwork and your own careers page: length limits, how pay is stated, what gets a listing rejected. Each listing gets its own apply link, so two versions on one board are an A/B test.</p>
-        <code>create_listing · listing_report</code>
-      </article>
-      <article class="card">
-        <h3>Forms that ask the right thing</h3>
-        <p>Must-have questions that mark who missed one, file questions for a setup photo or a speed test, and screening forms sent to each shortlisted applicant through a personal link.</p>
-        <code>set_application_form · get_screening_link</code>
-      </article>
-      <article class="card">
-        <h3>A ranking you can check</h3>
-        <p>Claude proposes an A, B or C tier for each applicant with a reason, following the rubric you wrote for the role. You decide. A tier you set is never overwritten.</p>
-        <code>rank_applicants · set_tier</code>
-      </article>
-      <article class="card">
-        <h3>Messages, interviews, offers</h3>
-        <p>Screening invites and rejections drafted for you and sent from your own email. Interview rounds with a scorecard per interviewer. Offers kept as versions, so a counter never erases what you offered.</p>
-        <code>prep_message · record_scorecard · record_offer</code>
-      </article>
-      <article class="card">
-        <h3>Bring the applicants you already have</h3>
-        <p>Paste an Indeed or LinkedIn applicant export and everyone lands in the job at once, counted against the listing they came through. It previews first and never adds anyone twice.</p>
-        <code>import_applicants</code>
-      </article>
-      <article class="card">
-        <h3>Or don't talk to it at all</h3>
-        <p>Every job, applicant, answer and file has a screen. Talking is faster for the busywork; the screen is where you look, adjust and decide. Both read the same data.</p>
-        <code>29 tools · 3 prompts</code>
-      </article>
-    </div>
-  </section>
+<div class="wrap"><hr class="fold"></div>
 
-  <section class="wrap split" id="provenance">
-    <div>
-      <p class="eyebrow">Provenance</p>
-      <h2>What the form saw.<br><span class="muted">Not a verdict.</span></h2>
+<!-- ==========================================================================
+     WHAT'S IN IT
+     ========================================================================== -->
+<section class="band" id="features">
+  <div class="wrap">
+    <div class="section-head" data-reveal>
+      <p class="eyebrow">What's in it</p>
+      <h2 class="h-section">From one sentence to a signed offer.</h2>
+      <p class="lede">
+        Listings, forms, a ranked pipeline, and everything you say to applicants after that.
+        Four parts, one record, and every part reachable from the assistant you already use.
+      </p>
     </div>
-    <div class="prose">
-      <p>The form counts characters by how they arrived, using the browser's own input events: typed, pasted, dropped, or filled in by something else, like autofill or an auto-typer. It notes a paste that comes right after the applicant left the page. It stores counts and timings, never keystrokes, and the form tells applicants what it records.</p>
-      <p>Writing style is a separate, weaker signal, and it always says <em>likely</em>. It misfires on second-language writers and people who use grammar tools, so it's a reason to ask a follow-up question, never a reason on its own to pass on someone.</p>
-      <p>Nothing in Recruited declines anyone automatically, and nothing calls an applicant a cheat.</p>
-    </div>
-  </section>
+    <div class="bento" style="margin-top:36px">
+      <div class="cell b-hero" data-spot data-lean data-reveal style="--tone:var(--primary); --i:1">
+        <div class="cell-body">
+          <div class="cell-dot" aria-hidden="true"></div>
+          <h3>A listing for every board</h3>
+          <p>Write the job once. Each board gets a listing in its own format, checked against its own rules, with its own apply link.</p>
+          <ul>
+            <li><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-check"/></svg><span>Guides for LinkedIn, Indeed, OnlineJobs.ph, Wellfound, Upwork and your careers page</span></li>
+            <li><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-check"/></svg><span>Two listings on one board are an A/B test, compared on applicants who met the must-haves</span></li>
+            <li><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-check"/></svg><span>It asks for pay and hours rather than inventing them</span></li>
+          </ul>
+        </div>
+        <div class="viz viz-record" data-live aria-hidden="true">
+          <div class="vz-head">Operations VA · job description</div>
+          <div class="vz-note">
+            <i style="--w:94%; --i:0"></i><i style="--w:78%; --i:1"></i><i style="--w:52%; --i:2"></i>
+          </div>
+          <div class="vz-note">
+            <i style="--w:88%; --i:3"></i><i style="--w:66%; --i:4"></i>
+            <i class="vz-fresh" style="--w:82%; --i:5"></i>
+          </div>
+          <div class="vz-pull">
+            <span class="vz-dot"></span>
+            <span class="vz-pull-lines"><i style="--w:100%"></i><i style="--w:72%"></i></span>
+            <span class="vz-tag">OnlineJobs.ph</span>
+          </div>
+        </div>
+      </div>
 
-  <section class="wrap" id="talk">
-    <p class="eyebrow">In practice</p>
-    <h2>There's nothing to learn.<br><span class="muted">You say what you'd say to a recruiter.</span></h2>
-    <div class="convo">
-      <p class="you">I'm hiring an operations VA, full time, PHP 30–40k a month. Post it on OnlineJobs.ph and LinkedIn.</p>
-      <p class="claude">Done: a job, a five-question application form with two must-haves, and a listing for each board in its own format. Here's what to paste and where. Tell me when they're live.</p>
-      <p class="you">Who's worth a call?</p>
-      <p class="claude">Three A's out of 41. Ana ran a support inbox for two years and her answers were typed. Two others pasted their longest answer after leaving the page; I'd ask them to walk through it on the call.</p>
-      <p class="faint small">An illustrative exchange.</p>
-    </div>
-  </section>
+      <div class="cell b-third" data-spot data-lean data-reveal style="--tone:var(--ai); --i:2">
+        <div class="cell-body">
+          <div class="cell-dot" aria-hidden="true"></div>
+          <h3>Forms that show their work</h3>
+          <p>Application and screening forms, with must-haves, file questions, and a record of how each answer arrived.</p>
+          <ul>
+            <li><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-check"/></svg><span>Typed, pasted or dropped in, counted by the browser itself</span></li>
+            <li><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-check"/></svg><span>A &ldquo;likely AI&rdquo; hint that always says likely</span></li>
+            <li><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-check"/></svg><span>The form tells applicants what it records</span></li>
+          </ul>
+        </div>
+        <div class="viz viz-prov" aria-hidden="true">
+          <div class="vz-pv"><i style="--w:74%; --i:0; background:var(--typed)"></i><i style="--w:26%; --i:1; background:var(--pasted)"></i></div>
+          <div class="vz-pv"><i style="--w:100%; --i:2; background:var(--typed)"></i></div>
+          <div class="vz-pv"><i style="--w:38%; --i:3; background:var(--typed)"></i><i style="--w:62%; --i:4; background:var(--pasted)"></i></div>
+          <div class="vz-pv"><i style="--w:100%; --i:5; background:var(--ai)"></i></div>
+        </div>
+      </div>
 
-  <section class="wrap split" id="own">
-    <div>
-      <p class="eyebrow">Yours</p>
-      <h2>Free, open source,<br><span class="muted">one variable to run.</span></h2>
-    </div>
-    <div class="prose">
-      <p>Recruited is AGPL-3.0. It needs Node and a Postgres database, and <code>DATABASE_URL</code> is the only setting: uploaded files live in the database too. Run it with Docker Compose in one command, or deploy it on Railway with a Postgres beside it.</p>
-      <p>Connect Claude by pasting your connection URL as a custom connector. Anything that speaks MCP works the same way.</p>
-      <p><a href="https://github.com/shifulaboratories/Recruited/blob/main/docs/DEPLOY.md">The deploy guide →</a></p>
-    </div>
-  </section>
+      <div class="cell b-third" data-spot data-lean data-reveal style="--tone:var(--tier-a); --i:3">
+        <div class="cell-body">
+          <div class="cell-dot" aria-hidden="true"></div>
+          <h3>Tiers, not a pile</h3>
+          <p>Every applicant gets a proposed A, B or C tier and a reason you can check, following the job's own rubric.</p>
+          <ul>
+            <li><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-check"/></svg><span>You accept or change it; a tier you set is never overwritten</span></li>
+            <li><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-check"/></svg><span>Import applicants from a board's CSV, never twice</span></li>
+            <li><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-check"/></svg><span>Cost per A-tier applicant, by listing</span></li>
+          </ul>
+        </div>
+        <div class="viz viz-board" data-live aria-hidden="true">
+          <div class="vz-col" style="--tone:var(--stage-wishlist)"><b></b><i></i></div>
+          <div class="vz-col" style="--tone:var(--tier-c)"><b></b><i></i></div>
+          <div class="vz-col" style="--tone:var(--tier-b)"><b></b><i></i></div>
+          <div class="vz-col" style="--tone:var(--tier-a)"><b></b><i></i></div>
+          <span class="vz-trip"></span>
+        </div>
+      </div>
 
-  <section class="wrap" id="faq">
-    <p class="eyebrow">Questions</p>
-    <h2>The ones that come up.</h2>
-    <details><summary>Does it post to job boards for me?</summary><p>No. None of these boards offers a posting API to a small employer without a partner agreement. Claude writes the listing in the board's format and checks it against the board's rules; you paste it and tell Claude when it's live.</p></details>
-    <details><summary>Does it send email from its own server?</summary><p>No. Messages are drafts until you send them from your own email, through your mail connector or the Open in email button, and then they're marked sent, so each applicant's page shows what they were told and when.</p></details>
-    <details><summary>Can it tell for certain that an answer was written with AI?</summary><p>No, and it never says it can. It reports what the form observed and labels style signals as likely. Treat both as a prompt for a question in the interview.</p></details>
-    <details><summary>Is it related to Hired?</summary><p>They're siblings. <a href="https://hired.tools">Hired</a> is an applicant tracking system for applicants; Recruited is the one for the people hiring. They share a look and a way of working, and they're separate products with no connection between them.</p></details>
-  </section>
+      <div class="cell b-third" data-spot data-lean data-reveal style="--tone:var(--stage-offer); --i:4">
+        <div class="cell-body">
+          <div class="cell-dot" aria-hidden="true"></div>
+          <h3>Messages, interviews, offers</h3>
+          <p>What you tell each applicant and when, every round and scorecard, and offers kept as versions.</p>
+          <ul>
+            <li><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-check"/></svg><span>Drafts you send from your own email; nothing goes out by itself</span></li>
+            <li><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-check"/></svg><span>A scorecard per interviewer, with the evidence for each yes or no</span></li>
+            <li><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-check"/></svg><span>A counter-offer never overwrites what you offered before</span></li>
+          </ul>
+        </div>
+        <div class="viz viz-people" data-live aria-hidden="true">
+          <span class="vz-thread"></span>
+          <div class="vz-who" style="--i:0"><span class="vz-face">MS</span><span class="vz-bars"><i style="--w:56%"></i><i style="--w:78%"></i></span><span class="vz-when"><b>Thu</b><em>call</em></span></div>
+          <div class="vz-who" style="--i:1"><span class="vz-face">JR</span><span class="vz-bars"><i style="--w:64%"></i><i style="--w:44%"></i></span><span class="vz-when"><b>Fri</b><em>call</em></span></div>
+          <div class="vz-who" style="--i:2"><span class="vz-face">AK</span><span class="vz-bars"><i style="--w:48%"></i><i style="--w:70%"></i></span><span class="vz-when"><b>Mon</b><em>call</em></span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="wrap"><hr class="fold"></div>
+
+<!-- ==========================================================================
+     PROVENANCE
+     The trust property, given its own section. Every claim here is a rule in
+     the code (CLAUDE.md, invariant 6).
+     ========================================================================== -->
+<section class="band" id="provenance">
+  <div class="wrap">
+    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(min(320px, 100%),1fr)); gap:40px; align-items:start">
+      <div class="section-head sticky-head" data-reveal>
+        <p class="eyebrow">The rule it's built on</p>
+        <h2 class="h-section">Provenance is observation, not proof.</h2>
+        <p class="lede">
+          The form records what the browser saw: how many characters were typed, pasted or
+          dropped in, and whether a paste came right after the applicant left the page. Style
+          signals are a weaker hint and always say &ldquo;likely&rdquo;. Nothing calls an
+          applicant a cheat, and nothing declines anyone on its own. You read the answer and
+          decide.
+        </p>
+      </div>
+      <div data-reveal="right">
+        <div class="panel" style="padding:18px 20px">
+          <div class="panel-head">
+            <span class="eyebrow">The question everyone asks</span>
+            <span class="dotline" aria-hidden="true"><i></i><i></i><i></i></span>
+          </div>
+          <div class="tape" data-tape>
+            <div class="turn you" data-step="1" data-pause="380">
+              <div class="who">You</div>
+              <div class="said" data-type>Did Maria write her answers herself?</div>
+            </div>
+            <div class="turn" data-step="2">
+              <div class="who">Recruited</div>
+              <div>
+                <div class="said" data-type>I can say how they arrived, not who wrote them. Her process answer was 74% typed and 26% pasted. &ldquo;Why this role&rdquo; was typed, but reads like a template, so it's marked likely AI. Worth asking about on the call. Not a reason to decline on its own.</div>
+                <div class="calls">
+                  <span class="call" style="--i:0"><i></i>get_application</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="app-card" style="padding:20px; margin-top:14px">
+          <p class="eyebrow" style="margin-bottom:12px">What the form records</p>
+          <p style="font-size:13.5px; color:var(--muted)">
+            Counts and timings, and the form says so before anyone starts typing.
+          </p>
+          <div class="refusal">
+            <div class="req yes">
+              <svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-check"/></svg>
+              <div><div class="t">How each answer arrived</div><div class="s">Characters typed, pasted or dropped in</div></div>
+            </div>
+            <div class="req yes">
+              <svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-check"/></svg>
+              <div><div class="t">A paste right after leaving the page</div><div class="s">Noted, with when it happened</div></div>
+            </div>
+            <div class="req yes">
+              <svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-check"/></svg>
+              <div><div class="t">Style signals</div><div class="s">Always &ldquo;likely&rdquo;, never a verdict</div></div>
+            </div>
+            <div class="req no">
+              <svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-no"/></svg>
+              <div><div class="t">Keystrokes</div><div class="s">Never stored</div></div>
+            </div>
+            <div class="req no">
+              <svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-no"/></svg>
+              <div><div class="t">Automatic rejection</div><div class="s">Nothing declines anyone by itself</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="wrap"><hr class="fold"></div>
+
+<!-- ==========================================================================
+     HOW YOU USE IT
+     ========================================================================== -->
+<section class="band" id="tools">
+  <div class="wrap">
+    <div class="section-head" data-reveal>
+      <p class="eyebrow">How you use it</p>
+      <h2 class="h-section">There is nothing to learn. You just say it.</h2>
+      <p class="lede">
+        The front end is the assistant you already have open. You say what you need, and it
+        reads and writes the record for you, the same record the app shows. You open the app
+        to look, adjust, and send.
+      </p>
+    </div>
+    <div class="talk" style="margin-top:34px">
+      <div class="panel chat" data-reveal>
+        <div class="panel-head">
+          <img class="mark" src="media/clients/claude.png" alt="" width="18" height="18" decoding="async">
+          <span class="eyebrow">Claude &middot; connected to Recruited</span>
+          <span class="dotline" aria-hidden="true"><i></i><i></i><i></i></span>
+        </div>
+        <div class="tape" data-tape>
+          <div class="turn you" data-step="1" data-pause="260">
+            <div class="who">You</div>
+            <div class="said" data-type>Write the rejections for everyone in C tier on the VA role. Keep them kind and short.</div>
+          </div>
+          <div class="turn" data-step="2" data-think="1600">
+            <div class="who">Recruited</div>
+            <div>
+              <div class="answer">
+                <div class="think" data-thinking hidden>
+                  <p class="think-say">
+                    <span class="think-dots" aria-hidden="true"><i style="--i:0"></i><i style="--i:1"></i><i style="--i:2"></i></span>
+                    <span>Reading the pipeline</span>
+                  </p>
+                  <span class="think-skel" aria-hidden="true"><i style="--w:97%; --i:0"></i><i style="--w:92%; --i:1"></i><i style="--w:99%; --i:2"></i><i style="--w:64%; --i:3"></i></span>
+                </div>
+                <div class="said" data-type>Drafted 20, each with their first name and the role, and no reason you didn't give me. They're saved as drafts on each applicant. Open one and send it from your own email; it's marked sent when you do.</div>
+              </div>
+              <div class="calls">
+                <span class="call" style="--i:0"><i></i>list_applications</span>
+                <span class="call" style="--i:1"><i></i>prep_message</span>
+                <span class="call" style="--i:2"><i></i>save_message</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="chat-bar" aria-hidden="true">
+          <span class="chat-field">Ask it anything about your hiring&hellip;</span>
+          <span class="chat-send"><svg width="14" height="14" viewBox="0 0 24 24"><use href="#i-right"/></svg></span>
+        </div>
+      </div>
+      <div class="says">
+        <article class="say" style="--tone:var(--primary)" data-reveal>
+          <p class="q">Post the VA role on Indeed too, same pay.</p>
+          <p class="then">
+            <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-right"/></svg>
+            A listing in Indeed's format, checked against its rules, with its own apply link.
+          </p>
+          <p class="via">create_listing</p>
+        </article>
+        <article class="say" style="--tone:var(--tier-a)" data-reveal>
+          <p class="q">Which listing is bringing in the A-tier people?</p>
+          <p class="then">
+            <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-right"/></svg>
+            Applicants who met the must-haves on each listing, how many are A tier, and what
+            each one cost.
+          </p>
+          <p class="via">listing_report</p>
+        </article>
+        <article class="say" style="--tone:var(--stage-offer)" data-reveal>
+          <p class="q">Book Maria for a call Thursday at 2 with Jo.</p>
+          <p class="then">
+            <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-right"/></svg>
+            Round one on her record, with the time and who she'll meet. The invite it drafts
+            names exactly that.
+          </p>
+          <p class="via">schedule_interview</p>
+        </article>
+      </div>
+    </div>
+    <p class="tools-more" data-reveal style="--i:2">
+      Every one of those sentences is the assistant calling a named tool against your own
+      workspace: 29 tools and 3 prompts. The screens and the assistant read and write the same
+      record &mdash;
+      <a href="https://github.com/shifulaboratories/Recruited#readme" rel="noopener">the README lists what's in it</a>.
+    </p>
+  </div>
+</section>
+
+<div class="wrap"><hr class="fold"></div>
+
+<!-- ==========================================================================
+     SELF-HOST
+     No pricing: there is no hosted plan. Both cards are true today.
+     ========================================================================== -->
+<section class="band" id="self-host">
+  <div class="wrap">
+    <div class="section-head" data-reveal>
+      <p class="eyebrow">Run it yourself</p>
+      <h2 class="h-section">Yours to run, and free.</h2>
+      <p class="lede">
+        Recruited is open source. It runs on one Postgres database and needs one setting, so a
+        small team can have it up in about ten minutes and own every record in it.
+      </p>
+    </div>
+    <div class="tiers pair" style="margin-top:24px">
+      <div class="tier lit" data-reveal style="--i:1">
+        <div class="tier-head"><h3>Self-hosted</h3></div>
+        <p class="price"><b>$0</b> <span>plus your server</span></p>
+        <p class="terms">available today</p>
+        <ul>
+          <li><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-check"/></svg><span>The whole product. There is no smaller version of it.</span></li>
+          <li><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-check"/></svg><span>One command with Docker Compose, or a few clicks on Railway.</span></li>
+          <li><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-check"/></svg><span>DATABASE_URL is the only setting. Uploads live in Postgres too.</span></li>
+          <li><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-check"/></svg><span>Migrations apply on start; the owner account is made on first boot.</span></li>
+          <li class="caveat"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-no"/></svg><span>You need somewhere to run it.</span></li>
+        </ul>
+        <div class="fill"></div>
+        <a class="btn btn-primary" href="https://github.com/shifulaboratories/Recruited/blob/main/docs/DEPLOY.md" rel="noopener">
+          Deploy guide
+          <svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-right"/></svg>
+        </a>
+      </div>
+      <div class="tier" data-reveal style="--i:2">
+        <div class="tier-head"><h3>Open source</h3></div>
+        <p class="price"><b>AGPL</b> <span>3.0</span></p>
+        <p class="terms">read every rule it follows</p>
+        <ul>
+          <li><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-check"/></svg><span>The provenance recorder is in the open, so you can check what the form keeps.</span></li>
+          <li><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-check"/></svg><span>One data layer that the tools and the screens share. No rule lives twice.</span></li>
+          <li><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-check"/></svg><span>Every workspace is private; one account can't read another's applicants.</span></li>
+          <li><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-check"/></svg><span>A stateless MCP endpoint, so restarts and replicas just work.</span></li>
+        </ul>
+        <div class="fill"></div>
+        <a class="btn btn-ghost" href="https://github.com/shifulaboratories/Recruited" rel="noopener">
+          Read the code
+          <svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-out"/></svg>
+        </a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="wrap"><hr class="fold"></div>
+
+<!-- ==========================================================================
+     FAQ
+     ========================================================================== -->
+<section class="band-tight" id="faq">
+  <div class="wrap wrap-narrow" style="padding-inline:0">
+    <div class="wrap">
+      <div class="section-head" data-reveal style="margin-bottom:26px">
+        <p class="eyebrow">Before you ask</p>
+        <h2 class="h-section">The questions that come up.</h2>
+      </div>
+      <div class="qa" data-reveal style="--i:1">
+        <details class="q">
+          <summary>Does it detect AI-written answers?<span class="plus" aria-hidden="true"></span></summary>
+          <div class="a"><p>It records how each answer reached the form: typed, pasted or dropped in. Separately, it can mark an answer as likely written with AI when the writing shows the usual signs. That label always says &ldquo;likely&rdquo;, because no detector is proof, and it's a reason to ask a question on the call rather than a reason to decline.</p></div>
+        </details>
+        <details class="q">
+          <summary>Will it reject anyone automatically?<span class="plus" aria-hidden="true"></span></summary>
+          <div class="a"><p>No. Must-have questions mark who didn't meet them, and ranking proposes a tier with a reason, but nothing moves an applicant's stage or tier without you. A tier you set is never overwritten.</p></div>
+        </details>
+        <details class="q">
+          <summary>Do applicants know what the form records?<span class="plus" aria-hidden="true"></span></summary>
+          <div class="a"><p>Yes. The form says so before they start. It keeps counts and timings, never keystrokes or the words someone typed and deleted.</p></div>
+        </details>
+        <details class="q">
+          <summary>Which boards does it write for?<span class="plus" aria-hidden="true"></span></summary>
+          <div class="a"><p>LinkedIn, Indeed, OnlineJobs.ph, Wellfound, Upwork and your own careers page. Each guide covers length limits, how pay is stated, what gets a listing rejected and where the apply link goes. You paste the listing into the board; Recruited doesn't post on your behalf.</p></div>
+        </details>
+        <details class="q">
+          <summary>Does it send email?<span class="plus" aria-hidden="true"></span></summary>
+          <div class="a"><p>No. It drafts the message and keeps a record of what was sent. You send it from your own email, through your assistant's mail connector or the app's Open in email, and the applicant's page shows what they were told and when.</p></div>
+        </details>
+        <details class="q">
+          <summary>What does it cost?<span class="plus" aria-hidden="true"></span></summary>
+          <div class="a"><p>Nothing. It's open source under the AGPL. You pay for wherever you run it, which for a small team is a small Postgres database and one app server.</p></div>
+        </details>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ==========================================================================
+     CLOSE
+     ========================================================================== -->
+<section class="band">
+  <div class="wrap" style="text-align:center">
+    <div class="motif" style="max-width:180px; margin:0 auto 28px" role="presentation" data-reveal="rule">
+      <i style="background:var(--tier-c)"></i>
+      <i style="background:var(--tier-b)"></i>
+      <i style="background:var(--tier-a)"></i>
+      <i style="background:var(--typed)"></i>
+      <i style="background:var(--pasted)"></i>
+      <i style="background:var(--ai)"></i>
+    </div>
+    <h2 class="h-section" data-reveal style="max-width:22ch; margin-inline:auto">Start with the role you need filled.</h2>
+    <p class="lede" data-reveal style="--i:1; margin:16px auto 0; text-align:center">
+      Say who you're looking for, what it pays and what they must have. The listings, the
+      forms and the pipeline are the system's problem.
+    </p>
+    <div class="hero-ctas" data-reveal style="--i:2">
+      <a class="btn btn-primary" data-magnet="4" href="https://github.com/shifulaboratories/Recruited/blob/main/docs/DEPLOY.md" rel="noopener">
+        Run your own
+        <svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-right"/></svg>
+      </a>
+      <a class="btn btn-ghost" href="https://github.com/shifulaboratories/Recruited" rel="noopener">
+        <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true"><use href="#i-gh"/></svg>
+        Read the code
+      </a>
+    </div>
+  </div>
+</section>
 </main>
 
-<footer class="wrap foot">
-  <span>recruited<span class="muted">.tools</span> · by <a href="https://shifulab.com">Shifu Labs</a></span>
-  <span><a href="https://github.com/shifulaboratories/Recruited">GitHub</a> · AGPL-3.0</span>
+<footer>
+  <div class="wrap">
+    <hr class="fold" style="margin-bottom:36px">
+    <div class="foot">
+      <div class="foot-brand">
+        <a class="brand" href="./" style="font-size:15px">
+          <svg width="22" height="22" viewBox="0 0 64 64" aria-hidden="true">
+            <rect width="64" height="64" rx="15" fill="var(--brand-tile, #191A1E)"/>
+            <circle cx="32" cy="24" r="8" fill="var(--brand-cut, #F9F9FA)"/>
+            <rect x="16" y="37" width="32" height="7" rx="3.5" fill="var(--brand-cut, #F9F9FA)"/>
+            <rect x="22" y="47" width="20" height="5" rx="2.5" fill="var(--brand-cut, #F9F9FA)" opacity=".55"/>
+          </svg>
+          Recruited
+        </a>
+        <p class="foot-line">Hire from a conversation. Know who wrote the answers. An applicant tracking system for small teams, run from the assistant you already use.</p>
+        <a class="shifu-tag" href="https://shifulab.com" rel="noopener">
+          <svg width="15" height="15" viewBox="0 0 96 96" aria-hidden="true"><use href="#i-shifu"/></svg>
+          <span>A <b>Shifu Labs</b> tool</span>
+        </a>
+        <div class="socials">
+          <a href="https://www.linkedin.com/company/shifulab/" rel="me noopener" title="Shifu Labs on LinkedIn" aria-label="Shifu Labs on LinkedIn">
+            <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-in"/></svg>
+          </a>
+          <a href="https://instagram.com/shifu" rel="me noopener" title="Shifu Labs on Instagram" aria-label="Shifu Labs on Instagram">
+            <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-ig"/></svg>
+          </a>
+          <a href="https://x.com/shifulab" rel="me noopener" title="Shifu Labs on X" aria-label="Shifu Labs on X">
+            <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-x"/></svg>
+          </a>
+        </div>
+      </div>
+      <nav class="foot-cols" aria-label="Footer">
+        <div>
+          <p class="foot-h">Product</p>
+          <ul>
+            <li><a href="#features">What's in it</a></li>
+            <li><a href="#provenance">Provenance</a></li>
+            <li><a href="#tools">How it works</a></li>
+            <li><a href="#self-host">Self-host</a></li>
+            <li><a href="#faq">Questions</a></li>
+          </ul>
+        </div>
+        <div>
+          <p class="foot-h">Source</p>
+          <ul>
+            <li><a href="https://github.com/shifulaboratories/Recruited" rel="noopener">GitHub <span class="stars" id="stars" hidden></span></a></li>
+            <li><a href="https://github.com/shifulaboratories/Recruited/blob/main/README.md" rel="noopener">README</a></li>
+            <li><a href="https://github.com/shifulaboratories/Recruited/blob/main/docs/DEPLOY.md" rel="noopener">Deploy guide</a></li>
+            <li><a href="https://hired.tools" rel="noopener">Hired, for applicants</a></li>
+          </ul>
+        </div>
+      </nav>
+    </div>
+    <div class="foot-base">
+      <span>&copy; 2026 Shifu Labs</span>
+      <span class="fill"></span>
+      <span>Built by hand. Shipped from the studio.</span>
+    </div>
+  </div>
+  <svg class="foot-mark" width="120" height="120" viewBox="0 0 96 96" aria-hidden="true" role="presentation"><use href="#i-shifu"/></svg>
 </footer>
+<script src="motion.js" defer></script>
 </body>
 </html>

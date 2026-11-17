@@ -127,3 +127,12 @@ The base image is an `ARG` so a build can use a mirror when Docker Hub rate-limi
 happened while testing this. A one-click Railway template has to be published from a
 Railway account, so the repo carries the config and docs/DEPLOY.md the steps; publishing
 the template is William's to do.
+
+## 2026-11-17: The landing page reuses hired.tools' page system
+
+site/styles.css and site/motion.js are copies of Hired's, retuned to Recruited's
+tokens (primary, tiers, provenance) and with the 3D mark rebuilt for the person
+glyph. Copied rather than shared because the two sites deploy separately and
+Recruited has no dependency on Hired. Recruited-only rules sit at the bottom of
+styles.css. No pricing and no waitlist on the page: there is no hosted plan and
+no signup backend, so both CTAs go to the deploy guide and the repository.
