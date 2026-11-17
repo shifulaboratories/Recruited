@@ -3,6 +3,7 @@ import * as jobs from "@/lib/data/jobs";
 import * as listings from "@/lib/data/listings";
 import * as forms from "@/lib/data/forms";
 import * as applications from "@/lib/data/applications";
+import * as uploads from "@/lib/data/uploads";
 import { UserError } from "@/lib/data/errors";
 import { BOARDS, BOARD_KEYS, boardByKey } from "@/lib/boards";
 import { QUESTION_TYPES } from "@/lib/forms";
@@ -81,7 +82,8 @@ const QUESTION_SCHEMA = {
     "{ id: lowercase_with_underscores, label, type, required?, help?, options? (choice types), knockout?, maxWords? }. " +
     "knockout marks a must-have: { accept: [answers that pass] } for yes_no and single_choice, { min, max } for number. " +
     "Missing a knockout marks the applicant as not meeting the must-haves; it never rejects them automatically. " +
-    "short_text and long_text answers are recorded for provenance (typed, pasted, likely AI), so ask open questions in those types.",
+    "short_text and long_text answers are recorded for provenance (typed, pasted, likely AI), so ask open questions in those types. " +
+    "file takes one attachment up to 10 MB; accept is image, pdf or image_or_pdf (default). Use it for a work-setup photo, a speed-test or typing-test screenshot, a portfolio PDF; say in help exactly what the picture should show.",
   items: {
     type: "object",
     properties: {
@@ -93,6 +95,7 @@ const QUESTION_SCHEMA = {
       options: { type: "array", items: { type: "string" } },
       knockout: { type: "object", properties: { accept: { type: "array", items: { type: "string" } }, min: { type: "number" }, max: { type: "number" } } },
       maxWords: { type: "number" },
+      accept: { type: "string", enum: ["image", "pdf", "image_or_pdf"] },
     },
     required: ["id", "label", "type"],
   },
@@ -403,7 +406,8 @@ export const TOOLS: McpTool[] = [
       "One applicant whole: contact, the listing that brought them, every answer on every form with how it arrived, knockouts missed, and notes. " +
       "Each written answer has origin (TYPED, PASTED, MIXED, INJECTED for autofill or auto-typers, UNKNOWN), a one-line summary of what the page observed, and style signals with a label. " +
       "Read origin as observation and style as a weak hint: pasting from your own notes is pasting, and second-language writers trip style signals. Never call someone a cheat or reject them on provenance alone; " +
-      "say what was observed ('pasted after 40 seconds away from the page', 'likely written with AI') and weigh it against what they said.",
+      "say what was observed ('pasted after 40 seconds away from the page', 'likely written with AI') and weigh it against what they said. " +
+      "Answers to file questions list their files; read_upload opens one.",
     inputSchema: object({ application_id: str("The application's id.") }, ["application_id"]),
     annotations: READ,
     handler: async (args, ctx) => {
@@ -469,6 +473,26 @@ export const TOOLS: McpTool[] = [
     },
   },
   {
+    name: "read_upload",
+    title: "Open an applicant's file",
+    description:
+      "Open a file an applicant attached (ids are in get_application, under each answer's files). Images come back as images you can see: check a speed-test screenshot against the must-have, describe a work-setup photo, read a typing-test score. PDFs come back as the document. " +
+      "Say what the file shows, not what you assume; a screenshot can be old or someone else's, so suggest asking for a live check when it matters.",
+    inputSchema: object({ upload_id: str("The file's id.") }, ["upload_id"]),
+    annotations: READ,
+    handler: async (args, ctx) => {
+      const u = await uploads.readUpload(ctx.userId, need(args, "upload_id"));
+      const meta = await uploads.uploadMeta(ctx.userId, u.id);
+      const data = Buffer.from(u.data).toString("base64");
+      const note = { type: "text", text: `${u.filename} (${u.mimeType}, ${Math.round(u.size / 1024)} KB), the answer to "${meta.question}".` };
+      if (u.mimeType.startsWith("image/") && u.mimeType !== "image/heic")
+        return { [MCP_CONTENT]: [note, { type: "image", data, mimeType: u.mimeType }] };
+      return {
+        [MCP_CONTENT]: [note, { type: "resource", resource: { uri: `${ctx.baseUrl}${uploads.filePath(u.id)}`, mimeType: u.mimeType, blob: data } }],
+      };
+    },
+  },
+  {
     name: "add_applicant",
     title: "Add an applicant",
     description:
@@ -526,6 +550,12 @@ export const TOOLS: McpTool[] = [
     },
   },
 ];
+
+/**
+ * A handler that returns { [MCP_CONTENT]: [...] } hands the transport MCP
+ * content blocks as they are (an image, a document) instead of JSON text.
+ */
+export const MCP_CONTENT = "__mcpContent";
 
 export const toolsByName = new Map(TOOLS.map((t) => [t.name, t]));
 

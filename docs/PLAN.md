@@ -12,20 +12,19 @@
 - The public apply page and screening form, with the provenance recorder.
 - 19 MCP tools, 2 prompts, and four screens.
 - Tiers and ranking (17 Nov): proposals from `rank_applicants` with reasons and rank, decisions by the person (`set_tier` or the app), a per-job rubric, tier filter and sort, A-tier counts and cost per A-tier in `listing_report`. 21 tools.
+- File questions (17 Nov): one image or PDF per question, up to 10 MB, typed by its bytes and stored in Postgres; shown on the applicant page and opened by Claude with `read_upload`. 22 tools.
 
 ## Next, in the order I'd take them
 
-1. **File uploads on forms.** OnlineJobs.ph screeners ask for a setup photo, a speed-test
-   screenshot and a typing test. Today those have to be links.
-2. **Messages to applicants.** Draft the screening invite, the rejection and the interview
+1. **Messages to applicants.** Draft the screening invite, the rejection and the interview
    ask; send through the person's own mail connector rather than from this server.
-3. **Importing from boards.** Paste an Indeed or LinkedIn applicant export (CSV) and add
+2. **Importing from boards.** Paste an Indeed or LinkedIn applicant export (CSV) and add
    everyone at once with their listing attributed.
-4. **Apply with Hired.** An applicant pastes their published Hired resume link
+3. **Apply with Hired.** An applicant pastes their published Hired resume link
    (`/r/<slug>/resume.json`, already built on the Hired side) and the form fills itself.
-5. **Interviews and offers.** Rounds, scorecards and offer versions, the hiring-side
+4. **Interviews and offers.** Rounds, scorecards and offer versions, the hiring-side
    mirror of what Hired has.
-6. **Deploy.** Dockerfile and a Railway template, as in Hired.
+5. **Deploy.** Dockerfile and a Railway template, as in Hired.
 
 ## What it deliberately doesn't do
 

@@ -13,10 +13,10 @@ You tell Claude what you're hiring for. It writes the job, an application form, 
 
 - **Board guides** for LinkedIn, Indeed, OnlineJobs.ph, Wellfound, Upwork and your own careers page: length limits, how pay is stated, what gets a listing rejected, where the apply link goes. Claude reads the guide before writing each listing, and the listing is checked against it.
 - **One apply link per listing.** Two listings of one job on one board are an A/B test; `listing_report` compares them on applicants who met the must-haves, not on raw volume.
-- **Forms** with must-have (knockout) questions, and screening forms sent to a shortlisted applicant through a personal link.
+- **Forms** with must-have (knockout) questions and file questions (a setup photo, a speed-test screenshot, a PDF), and screening forms sent to a shortlisted applicant through a personal link. Files are kept in Postgres, so there's still nothing to configure, and Claude can open them with `read_upload`.
 - **Answer provenance.** The form counts characters by how they arrived, using the browser's own input types, and notes a paste that comes right after the applicant left the page. It stores counts and timings, never keystrokes, and the form says so. Style signals are a separate, weaker hint and always say "likely".
 - **Tiers and ranking.** `rank_applicants` proposes an A, B or C tier and a rank for each applicant, with a reason you can check, following the job's own rubric. You accept or change it in the app; a tier you decided is never overwritten. `listing_report` counts A-tier applicants and their cost per listing.
-- **21 MCP tools and 2 prompts** (`post_a_role`, `review_applicants`). The app has the screens a person needs to look and adjust: jobs, applicants, one applicant's answers, and Connect Claude.
+- **22 MCP tools and 2 prompts** (`post_a_role`, `review_applicants`). The app has the screens a person needs to look and adjust: jobs, applicants, one applicant's answers, and Connect Claude.
 
 ## Connect your AI
 

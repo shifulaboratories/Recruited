@@ -103,3 +103,21 @@ test("forms: schema rules, knockouts and validation", () => {
   assert.equal(validateAnswer(qs[0], ""), "This one is required.");
   assert.equal(readQuestions([{ id: "x", label: "X", type: "nope" }, qs[2]]).length, 1);
 });
+
+import { sniffMime, accepts, cleanFilename } from "../src/lib/files.ts";
+
+test("files: the type comes from the bytes, not the name", () => {
+  const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]);
+  const pdf = new TextEncoder().encode("%PDF-1.7 rest of file");
+  const html = new TextEncoder().encode("<html><script>alert(1)</script></html>");
+  assert.equal(sniffMime(png), "image/png");
+  assert.equal(sniffMime(pdf), "application/pdf");
+  assert.equal(sniffMime(html), null);
+  assert.ok(accepts("image_or_pdf", "application/pdf"));
+  assert.ok(!accepts("image", "application/pdf"));
+  assert.equal(cleanFilename("../../etc/pass\"wd.png"), "pass_wd.png");
+  assert.equal(cleanFilename(""), "file");
+  const q = QuestionsSchema.parse([{ id: "setup_photo", label: "Your work setup", type: "file", accept: "image", required: true }]);
+  assert.equal(q[0].accept, "image");
+  assert.equal(QuestionsSchema.parse([{ id: "cv", label: "CV", type: "file" }])[0].accept, "image_or_pdf");
+});

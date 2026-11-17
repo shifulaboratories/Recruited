@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requireUser } from "@/lib/auth";
 import { getApplication, STAGES, TIERS } from "@/lib/data/applications";
 import { boardByKey } from "@/lib/boards";
+import { filePath } from "@/lib/data/uploads";
 import type { StyleSignal } from "@/lib/provenance";
 import type { KnockoutResult } from "@/lib/forms";
 import { acceptProposal, addNote, moveStage, setTier } from "@/server/actions";
@@ -81,7 +82,7 @@ export default async function ApplicationPage({ params }: { params: Promise<{ id
           </span>
         </div>
         {a.tierReason && <p className="text-rt-muted">{a.tierReason}</p>}
-        {a.proposal && (
+        {a.proposal && !(a.tier === a.proposal.tier && a.tierReason === a.proposal.reason) && (
           <div className="flex flex-wrap items-start gap-3 rounded bg-rt-subtle p-3">
             <TierChip tier={a.proposal.tier} proposal rank={a.proposal.rank} />
             <p className="flex-1 min-w-[200px] text-rt-muted">
@@ -124,9 +125,27 @@ export default async function ApplicationPage({ params }: { params: Promise<{ id
                 return (
                   <li key={x.questionId} className="card p-4 space-y-2">
                     <div className="text-rt-muted">{x.question}</div>
-                    <div className="whitespace-pre-wrap">
-                      {x.answer ? <span className={`rounded-sm ${hl}`}>{x.answer}</span> : <span className="text-rt-faint">No answer</span>}
-                    </div>
+                    {x.files.length > 0 ? (
+                      <div className="flex flex-wrap gap-3">
+                        {x.files.map((f) => (
+                          <a key={f.id} href={filePath(f.id)} target="_blank" rel="noreferrer" className="block group">
+                            {f.mimeType.startsWith("image/") && f.mimeType !== "image/heic" ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img src={filePath(f.id)} alt={f.filename} className="max-h-56 max-w-full rounded border border-rt-border" />
+                            ) : (
+                              <span className="btn text-xs">Open {f.mimeType === "application/pdf" ? "PDF" : "file"}</span>
+                            )}
+                            <span className="block text-xs text-rt-muted mt-1 group-hover:text-rt-foreground">
+                              {f.filename} · {Math.max(1, Math.round(f.size / 1024))} KB
+                            </span>
+                          </a>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="whitespace-pre-wrap">
+                        {x.answer ? <span className={`rounded-sm ${hl}`}>{x.answer}</span> : <span className="text-rt-faint">No answer</span>}
+                      </div>
+                    )}
                     {written && x.answer && (
                       <div className="space-y-1 pt-1">
                         <div className="flex flex-wrap items-center gap-2">

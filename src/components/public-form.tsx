@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import type { FormQuestion } from "@/lib/forms";
 import { WRITTEN_TYPES } from "@/lib/forms";
 import { EMPTY_TELEMETRY, type FieldTelemetry } from "@/lib/provenance";
+import { acceptAttr, acceptLabel, MAX_FILE_BYTES } from "@/lib/files";
 
 /**
  * The public form, with the provenance recorder built in.
@@ -180,31 +181,51 @@ export function PublicForm({
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
     const answers: Record<string, string> = {};
+    const files: [string, File][] = [];
     for (const q of questions) {
+      if (q.type === "file") {
+        const f = fd.get(q.id);
+        if (f instanceof File && f.size > 0) files.push([q.id, f]);
+        continue;
+      }
       answers[q.id] = q.type === "multi_choice" ? fd.getAll(q.id).map(String).join("\n") : String(fd.get(q.id) ?? "");
+    }
+    const tooBig = files.find(([, f]) => f.size > MAX_FILE_BYTES);
+    if (tooBig) {
+      setErrors({ [tooBig[0]]: "That file is over 10 MB. Try a smaller one or a screenshot." });
+      setMessage("Some answers need another look.");
+      return;
     }
     setSending(true);
     setMessage("");
+    const payload = JSON.stringify({
+      name: String(fd.get("name") ?? ""),
+      email: String(fd.get("email") ?? ""),
+      answers,
+      telemetry: snapshot(answers),
+      recorded: true,
+      durationMs: Date.now() - startedAt.current,
+    });
+    let body: BodyInit = payload;
+    if (files.length) {
+      const multi = new FormData();
+      multi.set("payload", payload);
+      for (const [id, f] of files) multi.set(id, f, f.name);
+      body = multi;
+    }
     try {
       const res = await fetch(endpoint, {
         method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          name: String(fd.get("name") ?? ""),
-          email: String(fd.get("email") ?? ""),
-          answers,
-          telemetry: snapshot(answers),
-          recorded: true,
-          durationMs: Date.now() - startedAt.current,
-        }),
+        headers: files.length ? undefined : { "content-type": "application/json" },
+        body,
       });
-      const body = await res.json().catch(() => ({}));
+      const answer = await res.json().catch(() => ({}));
       if (res.ok) {
         setDone(true);
         window.scrollTo({ top: 0 });
       } else {
-        setErrors(body.fields ?? {});
-        setMessage(body.error ?? "Something went wrong. Try again in a moment.");
+        setErrors(answer.fields ?? {});
+        setMessage(answer.fields?._form ?? answer.error ?? "Something went wrong. Try again in a moment.");
       }
     } catch {
       setMessage("Couldn't reach the server. Check your connection and try again.");
@@ -252,6 +273,16 @@ export function PublicForm({
             </>
           ) : WRITTEN_TYPES.includes(q.type) ? (
             <input className="field" name={q.id} ref={bind(q.id)} autoComplete="off" />
+          ) : q.type === "file" ? (
+            <>
+            <input
+              className="field file:mr-3 file:rounded file:border-0 file:bg-rt-subtle file:px-2 file:py-1 file:text-rt-foreground"
+              type="file"
+              name={q.id}
+              accept={acceptAttr(q.accept)}
+            />
+            <div className="text-xs text-rt-faint">One file, up to 10 MB: {acceptLabel(q.accept)}.</div>
+            </>
           ) : q.type === "yes_no" ? (
             <div className="flex gap-4">
               {["Yes", "No"].map((o) => (

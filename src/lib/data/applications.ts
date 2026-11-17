@@ -187,7 +187,11 @@ export async function getApplication(userId: string, applicationId: string) {
       notes: { orderBy: { createdAt: "asc" } },
       submissions: {
         orderBy: { createdAt: "asc" },
-        include: { form: { select: { id: true, name: true, kind: true } }, answers: true },
+        include: {
+          form: { select: { id: true, name: true, kind: true } },
+          // Never `data`: see the Upload model.
+          answers: { include: { uploads: { select: { id: true, filename: true, mimeType: true, size: true } } } },
+        },
       },
     },
   });
@@ -220,6 +224,7 @@ export async function getApplication(userId: string, applicationId: string) {
         pastedShare: x.pastedShare,
         summary: (x.telemetry as { summary?: string })?.summary ?? "",
         style: { score: x.styleScore, label: styleLabel(x.styleScore), signals: x.styleSignals },
+        files: x.uploads,
       })),
     })),
     notes: a.notes.map((n) => ({ id: n.id, body: n.body, writtenBy: n.writtenBy, at: n.createdAt })),

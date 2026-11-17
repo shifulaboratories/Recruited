@@ -4,6 +4,7 @@ import { upsertCandidate } from "@/lib/data/applications";
 import { failedKnockouts, readQuestions, validateAnswer, WRITTEN_TYPES, type FormQuestion } from "@/lib/forms";
 import { classifyOrigin, readTelemetry, styleSignals } from "@/lib/provenance";
 import { secret } from "@/lib/ids";
+import { accepts, acceptLabel, cleanFilename, MAX_FILE_BYTES, MAX_TOTAL_BYTES, sniffMime } from "@/lib/files";
 
 /**
  * The two unauthenticated paths into a workspace: the apply page
@@ -23,6 +24,8 @@ export type PublicPayload = {
   telemetry: Record<string, unknown>;
   recorded: boolean;
   durationMs: number;
+  /** Files for "file" questions, by question id. */
+  files?: Record<string, { filename: string; bytes: Uint8Array }>;
 };
 
 export async function publicListing(listingSlug: string) {
@@ -55,12 +58,31 @@ export async function publicListing(listingSlug: string) {
 
 function buildAnswers(questions: FormQuestion[], p: PublicPayload) {
   const errors: Record<string, string> = {};
+  const files: Record<string, { filename: string; mimeType: string; size: number; data: Uint8Array<ArrayBuffer> }> = {};
+  let total = 0;
   for (const q of questions) {
-    const e = validateAnswer(q, p.answers[q.id] ?? "");
-    if (e) errors[q.id] = e;
+    if (q.type !== "file") continue;
+    const f = p.files?.[q.id];
+    if (!f || !f.bytes.length) continue;
+    const mime = sniffMime(f.bytes);
+    if (f.bytes.length > MAX_FILE_BYTES) errors[q.id] = "That file is over 10 MB. Try a smaller one or a screenshot.";
+    else if (!mime || !accepts(q.accept, mime)) errors[q.id] = `Attach ${acceptLabel(q.accept)}.`;
+    else {
+      total += f.bytes.length;
+      files[q.id] = { filename: cleanFilename(f.filename), mimeType: mime, size: f.bytes.length, data: new Uint8Array(f.bytes) };
+    }
+  }
+  if (total > MAX_TOTAL_BYTES) errors._form = "Together the files are over 25 MB. Attach smaller ones.";
+  // A file question's answer is the attached file's name.
+  const answers = { ...p.answers };
+  for (const q of questions) if (q.type === "file") answers[q.id] = files[q.id]?.filename ?? "";
+  for (const q of questions) {
+    if (errors[q.id]) continue;
+    const e = validateAnswer(q, answers[q.id] ?? "");
+    if (e) errors[q.id] = q.type === "file" && e === "This one is required." ? `Attach ${acceptLabel(q.accept)}.` : e;
   }
   const rows = questions.map((q) => {
-    const value = (p.answers[q.id] ?? "").trim();
+    const value = (answers[q.id] ?? "").trim();
     const written = WRITTEN_TYPES.includes(q.type);
     const t = readTelemetry(p.telemetry?.[q.id]);
     const o = written ? classifyOrigin(t, value, p.recorded) : null;
@@ -74,10 +96,16 @@ function buildAnswers(questions: FormQuestion[], p: PublicPayload) {
       telemetry: written ? { ...t, typingCps: o!.typingCps, flags: o!.flags, summary: o!.summary } : {},
       styleScore: style.score,
       styleSignals: style.signals,
+      file: files[q.id],
     };
   });
   const answersById = Object.fromEntries(rows.map((r) => [r.questionId, r.value]));
   return { errors, rows, failed: failedKnockouts(questions, answersById) };
+}
+
+function answerCreate(r: ReturnType<typeof buildAnswers>["rows"][number], userId: string) {
+  const { file, ...answer } = r;
+  return { ...answer, userId, ...(file ? { uploads: { create: { ...file, userId } } } : {}) };
 }
 
 export class FormErrors extends UserError {
@@ -133,7 +161,7 @@ export async function submitApplication(listingSlug: string, p: PublicPayload) {
           durationMs: Math.max(0, Math.min(Math.round(p.durationMs || 0), 1e9)),
           recorded: !!p.recorded,
           failed: built.failed,
-          answers: { create: built.rows.map((r) => ({ ...r, userId })) },
+          answers: { create: built.rows.map((r) => answerCreate(r, userId)) },
         },
       });
     }
@@ -180,7 +208,7 @@ export async function submitScreening(formSlug: string, token: string, p: Public
         durationMs: Math.max(0, Math.min(Math.round(p.durationMs || 0), 1e9)),
         recorded: !!p.recorded,
         failed: built.failed,
-        answers: { create: built.rows.map((r) => ({ ...r, userId: f.userId })) },
+        answers: { create: built.rows.map((r) => answerCreate(r, f.userId)) },
       },
     });
     if (hasKnockouts) {

@@ -1,7 +1,7 @@
 import type { User } from "@prisma/client";
 import { UserError } from "@/lib/data/errors";
 import { FormErrors } from "@/lib/data/public";
-import { TOOLS, toolsByName, PROMPTS, promptsByName, type McpContext } from "@/lib/mcp/tools";
+import { TOOLS, toolsByName, PROMPTS, promptsByName, MCP_CONTENT, type McpContext } from "@/lib/mcp/tools";
 
 /**
  * A small, stateless implementation of the MCP Streamable HTTP transport,
@@ -60,6 +60,7 @@ async function callTool(name: string, args: Record<string, unknown>, ctx: McpCon
   if (!tool) return { content: [{ type: "text", text: `There is no tool called ${name}.` }], isError: true };
   try {
     const result = await tool.handler(args ?? {}, ctx);
+    if (result && typeof result === "object" && MCP_CONTENT in result) return { content: (result as Record<string, unknown>)[MCP_CONTENT] };
     return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }], structuredContent: Array.isArray(result) ? { items: result } : result };
   } catch (e) {
     if (e instanceof FormErrors) return { content: [{ type: "text", text: `${e.message} ${JSON.stringify(e.fields)}` }], isError: true };
