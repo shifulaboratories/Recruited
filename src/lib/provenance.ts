@@ -249,9 +249,12 @@ export function styleSignals(text: string): { score: number; signals: StyleSigna
   return { score, signals };
 }
 
-/** A label for the style score that never claims more than it knows. */
+/**
+ * A label for the style score that never claims more than it knows. The brand
+ * rule: inference always says "likely", and nothing here is called proof.
+ */
 export function styleLabel(score: number): string {
-  if (score >= 0.5) return "Several style signals";
-  if (score >= 0.2) return "Some style signals";
-  return "No notable style signals";
+  if (score >= 0.5) return "Likely written with AI";
+  if (score >= 0.2) return "Some signs of AI writing";
+  return "No signs of AI writing";
 }

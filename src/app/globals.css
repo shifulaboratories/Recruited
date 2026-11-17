@@ -1,0 +1,81 @@
+@import "tailwindcss";
+@import "../../brand/tokens/tokens.css";
+
+/* The brand kit's Tailwind mapping (brand/tokens/tailwind-theme.css), so
+   utilities read bg-rt-surface, text-rt-muted and so on. Change colours in
+   tokens.css, never here. */
+@theme inline {
+  --color-rt-background: var(--rt-background);
+  --color-rt-surface: var(--rt-surface);
+  --color-rt-subtle: var(--rt-subtle);
+  --color-rt-border: var(--rt-border);
+  --color-rt-foreground: var(--rt-foreground);
+  --color-rt-muted: var(--rt-muted);
+  --color-rt-faint: var(--rt-faint);
+  --color-rt-primary: var(--rt-primary);
+  --color-rt-primary-tint: var(--rt-primary-tint);
+  --color-rt-tier-a: var(--rt-tier-a);
+  --color-rt-tier-b: var(--rt-tier-b);
+  --color-rt-tier-c: var(--rt-tier-c);
+  --color-rt-typed: var(--rt-typed);
+  --color-rt-pasted: var(--rt-pasted);
+  --color-rt-ai: var(--rt-ai);
+  --color-rt-destructive: var(--rt-destructive);
+  --color-rt-success: var(--rt-success);
+  --color-rt-warning: var(--rt-warning);
+  --font-sans: var(--rt-font-sans);
+  --font-mono: var(--rt-font-mono);
+}
+
+html {
+  color-scheme: light dark;
+  background: var(--rt-background);
+  color: var(--rt-foreground);
+  font-family: var(--rt-font-sans);
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11", "ss01";
+  font-size: 14px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+body { background: var(--rt-background); }
+::selection { background: var(--rt-primary-tint); }
+[data-theme="light"] { color-scheme: light; }
+[data-theme="dark"] { color-scheme: dark; }
+:focus-visible { outline: 2px solid var(--rt-primary); outline-offset: 2px; }
+
+.tabular { font-variant-numeric: tabular-nums; }
+.eyebrow {
+  font-family: var(--rt-font-mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--rt-faint);
+}
+
+/* Provenance highlight: the colour at 20% behind the text, per the brand kit. */
+.hl-pasted { background: color-mix(in oklch, var(--rt-pasted) 20%, transparent); }
+.hl-ai { background: color-mix(in oklch, var(--rt-ai) 20%, transparent); }
+.hl-injected { background: color-mix(in oklch, var(--rt-pasted) 20%, transparent); text-decoration: underline dotted var(--rt-pasted); }
+
+.field {
+  width: 100%;
+  background: var(--rt-surface);
+  border: 1px solid var(--rt-border);
+  border-radius: var(--rt-radius-sm);
+  padding: 8px 10px;
+  font: inherit;
+  color: inherit;
+}
+.field:focus { outline: 2px solid var(--rt-primary); outline-offset: -1px; border-color: transparent; }
+.btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  border-radius: var(--rt-radius-sm); padding: 7px 12px; font-weight: 500;
+  border: 1px solid var(--rt-border); background: var(--rt-surface); color: var(--rt-foreground);
+  cursor: pointer;
+}
+.btn:hover { background: var(--rt-subtle); }
+.btn-primary { background: var(--rt-primary); border-color: var(--rt-primary); color: white; }
+.btn-primary:hover { background: var(--rt-primary); filter: brightness(1.08); }
+.card { background: var(--rt-surface); border: 1px solid var(--rt-border); border-radius: var(--rt-radius); }
+a.link { color: var(--rt-primary); }
+a.link:hover { text-decoration: underline; }
