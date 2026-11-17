@@ -9,6 +9,7 @@ import * as listings from "@/lib/data/listings";
 import * as applications from "@/lib/data/applications";
 import * as connections from "@/lib/data/connections";
 import * as messages from "@/lib/data/messages";
+import * as imports from "@/lib/data/imports";
 import { updateAccount, userByLogin } from "@/lib/data/users";
 import { UserError } from "@/lib/data/errors";
 
@@ -143,4 +144,30 @@ export async function deleteMessageDraft(applicationId: string, messageId: strin
   const user = await requireUser();
   await messages.deleteDraft(user.id, messageId);
   revalidatePath(`/applications/${applicationId}`);
+}
+
+export type ImportResult = Awaited<ReturnType<typeof imports.importApplicants>>;
+
+/** Preview (dryRun) or run an import from the job page. Returns the same report the tool does. */
+export async function importApplicantsAction(input: {
+  jobId: string;
+  csv: string;
+  listingId?: string;
+  dryRun: boolean;
+}): Promise<{ error?: string; result?: ImportResult }> {
+  const user = await requireUser();
+  try {
+    const result = await imports.importApplicants(user.id, {
+      jobId: input.jobId,
+      csv: input.csv,
+      listingId: input.listingId || undefined,
+      dryRun: input.dryRun,
+      writtenBy: "app",
+    });
+    if (!input.dryRun) revalidatePath(`/jobs/${input.jobId}`);
+    return { result };
+  } catch (e) {
+    if (e instanceof UserError) return { error: e.message };
+    throw e;
+  }
 }

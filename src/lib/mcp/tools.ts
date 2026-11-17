@@ -5,10 +5,12 @@ import * as forms from "@/lib/data/forms";
 import * as applications from "@/lib/data/applications";
 import * as uploads from "@/lib/data/uploads";
 import * as messages from "@/lib/data/messages";
+import * as imports from "@/lib/data/imports";
 import { UserError } from "@/lib/data/errors";
 import { BOARDS, BOARD_KEYS, boardByKey } from "@/lib/boards";
 import { QUESTION_TYPES } from "@/lib/forms";
 import { MESSAGE_KINDS } from "@/lib/messages";
+import { IMPORT_FIELDS, type ImportField } from "@/lib/csv";
 
 /**
  * Every tool and prompt, in one array each. The description IS the interface:
@@ -526,6 +528,44 @@ export const TOOLS: McpTool[] = [
         note: s(args, "note"),
       });
       return { applicationId: a.id, candidate: a.candidate.name, stage: a.stage };
+    },
+  },
+  {
+    name: "import_applicants",
+    title: "Import applicants from a board export",
+    description:
+      "Add everyone in an applicant export (Indeed, LinkedIn, Wellfound, a spreadsheet) to one job at once. Reach for it when the person pastes or attaches a CSV of applicants; for one or two people use add_applicant. " +
+      "Pass the file's text as it is. Columns are recognised by their headers (name or first and last name, email, phone, profile and resume links); every other column is kept as a note on the applicant. If a column isn't found, the error lists the headers: ask which one it is, or pass columns. " +
+      "dry_run defaults to true and saves nothing: it returns what would be added, who already applied, and which rows would be skipped and why. Show the person that summary, then call again with dry_run false. " +
+      "Give listing_id when the export came from one of this job's listings, so listing_report counts those applicants against it. People already in this job are never added twice. Imported applicants have no answers, so they have no provenance.",
+    inputSchema: object(
+      {
+        job_id: str("The job's id."),
+        csv: str("The export's full text, header row first. Comma, tab or semicolon separated."),
+        listing_id: str("The listing these applicants came through, if any."),
+        source: str("Where they came from when there's no listing, e.g. 'indeed export'. Guessed from the headers when left out."),
+        columns: {
+          type: "object",
+          description: `Name a column outright when the guess is wrong or missing, as field to header, e.g. {"email": "Contact"}. Fields: ${IMPORT_FIELDS.join(", ")}.`,
+          properties: Object.fromEntries(IMPORT_FIELDS.map((f) => [f, { type: "string" }])),
+          additionalProperties: false,
+        },
+        dry_run: bool("True (the default) previews and saves nothing. False adds them."),
+      },
+      ["job_id", "csv"],
+    ),
+    annotations: ADD,
+    handler: (args, ctx) => {
+      const cols = (args.columns && typeof args.columns === "object" ? args.columns : {}) as Record<string, unknown>;
+      return imports.importApplicants(ctx.userId, {
+        jobId: need(args, "job_id"),
+        csv: need(args, "csv"),
+        listingId: s(args, "listing_id"),
+        source: s(args, "source"),
+        columns: Object.fromEntries(Object.entries(cols).filter(([k, v]) => IMPORT_FIELDS.includes(k as ImportField) && typeof v === "string")),
+        dryRun: args.dry_run !== false,
+        writtenBy: "mcp",
+      });
     },
   },
   {

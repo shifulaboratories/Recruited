@@ -44,7 +44,7 @@ export async function upsertCandidate(
  */
 export async function addApplicant(
   userId: string,
-  input: { jobId: string; name: string; email: string; phone?: string; links?: string[]; source?: string; listingId?: string; note?: string },
+  input: { jobId: string; name: string; email: string; phone?: string; links?: string[]; source?: string; listingId?: string; note?: string; writtenBy?: "app" | "mcp" },
 ) {
   const job = await requireJob(userId, input.jobId);
   if (input.listingId) {
@@ -55,7 +55,7 @@ export async function addApplicant(
   const already = await db.application.findUnique({ where: { jobId_candidateId: { jobId: job.id, candidateId: candidate.id } } });
   if (already && !already.archivedAt) throw new UserError(`${candidate.name} has already applied to this job (application ${already.id}).`);
   const app = already
-    ? await db.application.update({ where: { id: already.id }, data: { archivedAt: null, stage: "NEW", source: input.source ?? "" } })
+    ? await db.application.update({ where: { id: already.id }, data: { archivedAt: null, stage: "NEW", source: input.source ?? "", listingId: input.listingId ?? null } })
     : await db.application.create({
         data: {
           userId,
@@ -66,7 +66,7 @@ export async function addApplicant(
           screenToken: secret("scr"),
         },
       });
-  if (input.note?.trim()) await db.note.create({ data: { userId, applicationId: app.id, body: input.note.trim(), writtenBy: "mcp" } });
+  if (input.note?.trim()) await db.note.create({ data: { userId, applicationId: app.id, body: input.note.trim(), writtenBy: input.writtenBy ?? "mcp" } });
   return { ...app, candidate };
 }
 

@@ -5,6 +5,7 @@ import { classifyOrigin, readTelemetry, styleSignals, styleLabel, EMPTY_TELEMETR
 import { renderListing, toPlain, toHtml, lintListing, boardByKey, BOARDS } from "../src/lib/boards.ts";
 import { QuestionsSchema, failedKnockouts, validateAnswer, readQuestions } from "../src/lib/forms.ts";
 import { mailtoLink, KIND_GUIDANCE, MESSAGE_KINDS } from "../src/lib/messages.ts";
+import { parseCsv, mapColumns, guessBoard, rowsToApplicants } from "../src/lib/csv.ts";
 
 const t = (o) => ({ ...EMPTY_TELEMETRY, ...o });
 
@@ -134,4 +135,31 @@ test("messages: every kind has guidance, and a rejection never cites provenance"
   for (const k of MESSAGE_KINDS) assert.ok(KIND_GUIDANCE[k].length > 0, k);
   assert.ok(KIND_GUIDANCE.REJECTION.some((g) => /provenance is not a reason/.test(g)));
   assert.ok(KIND_GUIDANCE.OFFER.some((g) => /Never fill a gap/.test(g)));
+});
+
+test("csv: quotes, embedded commas and newlines, BOM, CRLF and tabs", () => {
+  const rows = parseCsv('\uFEFFName,Email,Note\r\n"Cruz, Lea",lea@x.co,"line one\nline ""two"""\r\n\r\n');
+  assert.deepEqual(rows, [["Name", "Email", "Note"], ["Cruz, Lea", "lea@x.co", 'line one\nline "two"']]);
+  assert.deepEqual(parseCsv("a\tb\n1\t2"), [["a", "b"], ["1", "2"]]);
+});
+
+test("csv: LinkedIn-style headers map by alias, and the rest becomes a note", () => {
+  const rows = parseCsv("First Name,Last Name,Email Address,Phone Number,Profile URL,Location\nAna,Villanueva,ANA@x.co,+63 900,https://linkedin.com/in/ana,Cebu\nBo,Lee,,,,\nCy,Tan,not-an-email,,,\nAna,V,ana@x.co,,,");
+  const map = mapColumns(rows[0]);
+  assert.deepEqual(map.email, ["Email Address"]);
+  assert.equal(guessBoard(rows[0]), "linkedin");
+  const out = rowsToApplicants(rows, map);
+  assert.equal(out[0].name, "Ana Villanueva");
+  assert.equal(out[0].email, "ana@x.co");
+  assert.deepEqual(out[0].links, ["https://linkedin.com/in/ana"]);
+  assert.deepEqual(out[0].extra, ["Location: Cebu"]);
+  assert.equal(out[1].problem, "no email address");
+  assert.match(out[2].problem, /isn't an email/);
+  assert.equal(out[3].problem, "same email as an earlier row");
+});
+
+test("csv: a named column beats the guess", () => {
+  const map = mapColumns(["Candidate", "Contact", "Email"], { email: "contact" });
+  assert.deepEqual(map.email, ["Contact"]);
+  assert.deepEqual(map.name, ["Candidate"]);
 });

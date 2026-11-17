@@ -77,3 +77,20 @@ for, what they were sent before) plus per-kind guidance from `src/lib/messages.t
 carries the rules that matter most: never invent a time, pay figure or reason, and never
 mention how an applicant's answers were typed or pasted in anything sent to them. The
 server instructions add that nothing goes to an applicant without the person's approval.
+
+## 2026-11-17 — Board imports match columns by header, preview by default
+
+Indeed and LinkedIn both export applicants as CSV, but neither documents its headers and
+both change them, so `src/lib/csv.ts` matches columns against aliases ("Email Address",
+"E-mail", "Contact email") and joins first and last name when there's no full-name column.
+When the email or name column can't be found, the error lists the headers, and the
+assistant names the right one with `columns`. Every column that isn't a contact detail is
+kept as a note on the applicant ("candidate location", "relevant experience"), because it's
+what the board knew about them and there's nowhere better to put it.
+
+`import_applicants` defaults to `dry_run: true`, as Hired's `import_resume` does: a bad
+column guess on a thousand rows is expensive to undo. The real run goes through
+`addApplicant` for each row, so an import follows the same rules as adding one person, and
+people already in the job are reported, never added twice. The board is guessed from the
+headers only to label `source` when no listing is given. Imported applicants have no
+answers and so no provenance, which the tool description says.
