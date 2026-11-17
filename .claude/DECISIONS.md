@@ -94,3 +94,23 @@ column guess on a thousand rows is expensive to undo. The real run goes through
 people already in the job are reported, never added twice. The board is guessed from the
 headers only to label `source` when no listing is given. Imported applicants have no
 answers and so no provenance, which the tool description says.
+
+## 2026-11-17 — Interviews, scorecards and offers are records; none of them decides
+
+Four tools, not eight. `schedule_interview` adds a round or, with `interview_id`, changes
+one (status included); `record_scorecard` adds one interviewer's verdict; `record_offer`
+writes a new offer version or, with `offer_id`, changes only a version's status;
+`list_interviews` answers "what's on this week" across jobs. `get_application` returns the
+interviews, scorecards and offers, so there's no separate getter.
+
+Offers are versions, as in Hired: terms left out carry over from the version before, a
+counter is one field, and "nothing changed" is refused so versions mean something. A
+status change edits the version in place, because it isn't a new term. A scorecard marks
+its interview DONE, since a verdict means the conversation happened; that is the only
+automatic change. Nothing moves an applicant's stage or tier: the panel summary
+(yes/no counts, whether anyone said strong no, whether it's split) is shown, never acted on.
+
+Times are stored in UTC. Tools take ISO 8601 with an offset; the page renders times in
+the viewer's browser and its picker submits an ISO string with the viewer's offset, because
+the server can't know the person's time zone. `prep_message` now returns the scheduled
+rounds and the latest offer, so an invite or an offer email states only what was recorded.

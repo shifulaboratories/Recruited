@@ -40,6 +40,9 @@ model User {
   notes        Note[]
   uploads      Upload[]
   messages     Message[]
+  interviews   Interview[]
+  scorecards   Scorecard[]
+  offers       Offer[]
 }
 
 model Session {
@@ -239,6 +242,8 @@ model Application {
   submissions Submission[]
   notes       Note[]
   messages    Message[]
+  interviews  Interview[]
+  offers      Offer[]
 
   @@unique([jobId, candidateId])
   @@index([userId, jobId, stage])
@@ -379,5 +384,104 @@ model Message {
   user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
   application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
 
+  @@index([userId, applicationId])
+}
+
+enum InterviewStatus {
+  SCHEDULED
+  DONE
+  CANCELLED
+  NO_SHOW
+}
+
+/// One conversation with an applicant. Rounds count up per application.
+model Interview {
+  id            String          @id @default(cuid())
+  userId        String
+  applicationId String
+  round         Int
+  /// What kind of conversation, in the person's words: "screening call", "work sample review", "final with the founder".
+  title         String
+  /// video | phone | in_person
+  format        String          @default("video")
+  scheduledAt   DateTime?
+  durationMin   Int?
+  /// Who they meet, as written: "Ana (ops lead), William".
+  interviewers  String          @default("")
+  /// A meeting link or an address.
+  location      String          @default("")
+  status        InterviewStatus @default(SCHEDULED)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  scorecards  Scorecard[]
+
+  @@index([userId, scheduledAt])
+  @@index([userId, applicationId])
+}
+
+enum Recommendation {
+  STRONG_YES
+  YES
+  NO
+  STRONG_NO
+}
+
+/// One interviewer's verdict on one interview. Several interviewers, several scorecards.
+model Scorecard {
+  id             String         @id @default(cuid())
+  userId         String
+  interviewId    String
+  interviewer    String
+  recommendation Recommendation
+  /// ScorecardRating[] from src/lib/scorecards.ts: criterion, score 1-4, note.
+  ratings        Json           @default("[]")
+  summary        String         @default("")
+  /// "app" or "mcp"
+  writtenBy      String         @default("app")
+  createdAt      DateTime       @default(now())
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  interview Interview @relation(fields: [interviewId], references: [id], onDelete: Cascade)
+
+  @@index([userId, interviewId])
+}
+
+enum OfferStatus {
+  DRAFT
+  EXTENDED
+  ACCEPTED
+  DECLINED
+  WITHDRAWN
+}
+
+/// One version of an offer. Changing the terms writes a new version, so the
+/// history of what was offered stays; a status change updates the version in place.
+model Offer {
+  id            String      @id @default(cuid())
+  userId        String
+  applicationId String
+  version       Int
+  title         String      @default("")
+  payAmount     Int?
+  payCurrency   String      @default("USD")
+  /// hour | month | year
+  payPeriod     String      @default("month")
+  startDate     DateTime?
+  /// "40 hours a week, 9am-6pm Manila time", as the person said it.
+  hours         String      @default("")
+  /// Anything else agreed, markdown: probation, equipment, leave.
+  terms         String      @default("")
+  respondBy     DateTime?
+  status        OfferStatus @default(DRAFT)
+  statusAt      DateTime?
+  createdAt     DateTime    @default(now())
+
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@unique([applicationId, version])
   @@index([userId, applicationId])
 }

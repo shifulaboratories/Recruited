@@ -5,8 +5,23 @@ import { boardByKey } from "@/lib/boards";
 import { filePath } from "@/lib/data/uploads";
 import type { StyleSignal } from "@/lib/provenance";
 import type { KnockoutResult } from "@/lib/forms";
-import { acceptProposal, addNote, deleteMessageDraft, markMessageSent, moveStage, saveMessageDraft, setTier } from "@/server/actions";
-import { ActionForm, CopyButton } from "@/components/forms";
+import {
+  acceptProposal,
+  addInterviewAction,
+  addNote,
+  addScorecardAction,
+  deleteMessageDraft,
+  markMessageSent,
+  moveStage,
+  recordOfferAction,
+  saveMessageDraft,
+  setInterviewStatus,
+  setOfferStatusAction,
+  setTier,
+} from "@/server/actions";
+import { ActionForm, CopyButton, DateTimeInput, LocalTime } from "@/components/forms";
+import { interviewsAndOffers } from "@/lib/data/interviews";
+import { OFFER_TERM_LABEL, RECOMMENDATION_LABEL, RECOMMENDATIONS } from "@/lib/scorecards";
 import { KIND_LABEL, MAILTO_SAFE_LENGTH, MESSAGE_KINDS, mailtoLink } from "@/lib/messages";
 import { OriginBadge, ProvenanceBar, QualifiedChip, StyleBadge, TierChip } from "@/components/provenance";
 
@@ -19,6 +34,8 @@ export default async function ApplicationPage({ params }: { params: Promise<{ id
   const { id } = await params;
   const user = await requireUser();
   const a = await getApplication(user.id, id);
+  const io = await interviewsAndOffers(user.id, id);
+  const latestOffer = io.offers.at(-1);
   return (
     <div className="space-y-8">
       <header className="space-y-2">
@@ -178,6 +195,202 @@ export default async function ApplicationPage({ params }: { params: Promise<{ id
           </section>
         );
       })}
+
+      <section className="space-y-3">
+        <div className="flex flex-wrap items-baseline gap-x-3">
+          <h2 className="font-semibold">Interviews</h2>
+          {io.panel.scorecards > 0 && (
+            <span className="text-xs text-rt-muted">
+              {io.panel.yes} yes, {io.panel.no} no across {io.panel.scorecards} scorecard{io.panel.scorecards === 1 ? "" : "s"}
+              {io.panel.strongNo && " · someone said strong no; read why before deciding"}
+              {io.panel.split && !io.panel.strongNo && " · the panel is split"}
+            </span>
+          )}
+        </div>
+        {io.interviews.length === 0 && <p className="text-rt-muted">No interviews yet. Ask Claude to schedule one, or add it below.</p>}
+        {io.interviews.map((iv) => (
+          <div key={iv.id} className={`card p-4 space-y-3 ${iv.status === "CANCELLED" ? "opacity-60" : ""}`}>
+            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+              <span className="font-mono text-[11px] uppercase tracking-wide text-rt-muted">Round {iv.round}</span>
+              <span className="font-medium">{iv.title}</span>
+              <span className="text-xs text-rt-muted">
+                {iv.scheduledAt ? <LocalTime iso={iv.scheduledAt.toISOString()} /> : "No time set"}
+                {iv.durationMin ? ` · ${iv.durationMin} min` : ""} · {iv.format.replace("_", " ")}
+                {iv.interviewers && ` · with ${iv.interviewers}`}
+              </span>
+            </div>
+            {iv.location && (
+              <div className="text-xs">
+                {/^https?:\/\//.test(iv.location) ? (
+                  <a className="link" href={iv.location} target="_blank" rel="noreferrer">
+                    {iv.location}
+                  </a>
+                ) : (
+                  <span className="text-rt-muted">{iv.location}</span>
+                )}
+              </div>
+            )}
+            <div className="flex flex-wrap gap-1">
+              {(["SCHEDULED", "DONE", "CANCELLED", "NO_SHOW"] as const).map((st) => (
+                <form key={st} action={setInterviewStatus.bind(null, a.id, iv.id, st)}>
+                  <button
+                    className={`font-mono text-[11px] uppercase tracking-wide rounded px-2 py-1 border ${
+                      iv.status === st ? "border-rt-primary bg-rt-primary-tint text-rt-primary" : "border-rt-border text-rt-muted hover:text-rt-foreground"
+                    }`}
+                  >
+                    {st.replace("_", " ").toLowerCase()}
+                  </button>
+                </form>
+              ))}
+            </div>
+            {iv.scorecards.map((c) => (
+              <div key={c.id} className="rounded bg-rt-subtle p-3 space-y-1">
+                <div className="flex flex-wrap items-center gap-2 text-xs">
+                  <span className="font-medium text-rt-foreground">{c.interviewer}</span>
+                  <span className="font-mono uppercase tracking-wide text-rt-muted">{RECOMMENDATION_LABEL[c.recommendation]}</span>
+                  {c.writtenBy === "mcp" && <span className="text-rt-faint">recorded through Claude</span>}
+                </div>
+                {c.ratings.length > 0 && (
+                  <ul className="text-xs text-rt-muted space-y-0.5">
+                    {c.ratings.map((r) => (
+                      <li key={r.criterion}>
+                        <span className="font-mono">{r.score}/4</span> {r.criterion}
+                        {r.note && ` · ${r.note}`}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {c.summary && <p className="text-rt-muted whitespace-pre-wrap">{c.summary}</p>}
+              </div>
+            ))}
+            {iv.status !== "CANCELLED" && (
+              <details className="text-sm">
+                <summary className="cursor-pointer text-rt-muted hover:text-rt-foreground">Add a scorecard</summary>
+                <ActionForm action={addScorecardAction} submit="Save scorecard" className="pt-3">
+                  <input type="hidden" name="applicationId" value={a.id} />
+                  <input type="hidden" name="interviewId" value={iv.id} />
+                  <input className="field" name="interviewer" placeholder="Interviewer" />
+                  <select name="recommendation" className="field" defaultValue="YES">
+                    {RECOMMENDATIONS.map((r) => (
+                      <option key={r} value={r}>
+                        {RECOMMENDATION_LABEL[r]}
+                      </option>
+                    ))}
+                  </select>
+                  <textarea className="field min-h-20" name="summary" placeholder="What you saw: evidence, not adjectives." />
+                </ActionForm>
+              </details>
+            )}
+          </div>
+        ))}
+        <details className="text-sm">
+          <summary className="cursor-pointer text-rt-muted hover:text-rt-foreground">Add an interview</summary>
+          <ActionForm action={addInterviewAction} submit="Add round" className="pt-3">
+            <input type="hidden" name="applicationId" value={a.id} />
+            <input className="field" name="title" placeholder="Screening call, work sample review, final with the founder" />
+            <div className="grid gap-3 sm:grid-cols-3">
+              <DateTimeInput name="scheduledAt" />
+              <input className="field" name="durationMin" type="number" min={5} max={600} placeholder="Minutes" />
+              <select name="format" className="field" defaultValue="video">
+                <option value="video">Video</option>
+                <option value="phone">Phone</option>
+                <option value="in_person">In person</option>
+              </select>
+            </div>
+            <input className="field" name="interviewers" placeholder="Who they'll meet" />
+            <input className="field" name="location" placeholder="Meeting link or address" />
+          </ActionForm>
+        </details>
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="font-semibold">Offer</h2>
+        {!latestOffer && <p className="text-rt-muted">No offer yet.</p>}
+        {[...io.offers].reverse().map((o) => {
+          const latest = o.id === latestOffer?.id;
+          return (
+            <div key={o.id} className={`card p-4 space-y-2 ${latest ? "" : "opacity-70"}`}>
+              <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                <span className="font-mono text-[11px] uppercase tracking-wide text-rt-muted">Version {o.version}</span>
+                <span className="font-medium">{o.title}</span>
+                <span className="text-xs text-rt-muted">{o.status.toLowerCase()}</span>
+                {o.changedFromPrevious.length > 0 && <span className="text-xs text-rt-faint">changed: {o.changedFromPrevious.map((k) => OFFER_TERM_LABEL[k as keyof typeof OFFER_TERM_LABEL] ?? k).join(", ")}</span>}
+              </div>
+              <dl className="grid gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
+                {o.pay && (
+                  <div>
+                    <dt className="inline text-rt-muted">Pay </dt>
+                    <dd className="inline">{o.pay}</dd>
+                  </div>
+                )}
+                {o.startDate && (
+                  <div>
+                    <dt className="inline text-rt-muted">Starts </dt>
+                    <dd className="inline">{o.startDate.toISOString().slice(0, 10)}</dd>
+                  </div>
+                )}
+                {o.hours && (
+                  <div>
+                    <dt className="inline text-rt-muted">Hours </dt>
+                    <dd className="inline">{o.hours}</dd>
+                  </div>
+                )}
+                {o.respondBy && (
+                  <div>
+                    <dt className="inline text-rt-muted">Answer by </dt>
+                    <dd className="inline">{o.respondBy.toISOString().slice(0, 10)}</dd>
+                  </div>
+                )}
+              </dl>
+              {o.terms && <p className="text-rt-muted whitespace-pre-wrap">{o.terms}</p>}
+              {latest && (
+                <div className="flex flex-wrap gap-1 pt-1">
+                  {(["DRAFT", "EXTENDED", "ACCEPTED", "DECLINED", "WITHDRAWN"] as const).map((st) => (
+                    <form key={st} action={setOfferStatusAction.bind(null, a.id, o.id, st)}>
+                      <button
+                        className={`font-mono text-[11px] uppercase tracking-wide rounded px-2 py-1 border ${
+                          o.status === st ? "border-rt-primary bg-rt-primary-tint text-rt-primary" : "border-rt-border text-rt-muted hover:text-rt-foreground"
+                        }`}
+                      >
+                        {st.toLowerCase()}
+                      </button>
+                    </form>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+        <details className="text-sm">
+          <summary className="cursor-pointer text-rt-muted hover:text-rt-foreground">{latestOffer ? "Change the terms (saves a new version)" : "Write an offer"}</summary>
+          <ActionForm action={recordOfferAction} submit="Save version" className="pt-3">
+            <input type="hidden" name="applicationId" value={a.id} />
+            <p className="text-xs text-rt-faint">{latestOffer ? "Leave a field empty to keep it as it is." : "Leave a field empty if it isn't decided yet."}</p>
+            <div className="grid gap-3 sm:grid-cols-3">
+              <input className="field" name="payAmount" inputMode="numeric" placeholder={latestOffer?.payAmount?.toLocaleString("en-US") ?? "Pay"} />
+              <input className="field" name="payCurrency" placeholder={latestOffer?.payCurrency ?? "Currency"} />
+              <select name="payPeriod" className="field" defaultValue="">
+                <option value="">{latestOffer ? `per ${latestOffer.payPeriod}` : "Per…"}</option>
+                <option value="hour">per hour</option>
+                <option value="month">per month</option>
+                <option value="year">per year</option>
+              </select>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="text-xs text-rt-muted space-y-1 block">
+                Start date
+                <input className="field" name="startDate" type="date" />
+              </label>
+              <label className="text-xs text-rt-muted space-y-1 block">
+                Answer by
+                <input className="field" name="respondBy" type="date" />
+              </label>
+            </div>
+            <input className="field" name="hours" placeholder={latestOffer?.hours || "Hours and schedule"} />
+            <textarea className="field min-h-20" name="terms" placeholder={latestOffer?.terms || "Anything else agreed: probation, equipment, leave."} />
+          </ActionForm>
+        </details>
+      </section>
 
       <section className="space-y-3">
         <div className="flex flex-wrap items-baseline gap-x-3">

@@ -18,7 +18,8 @@ You tell Claude what you're hiring for. It writes the job, an application form, 
 - **Tiers and ranking.** `rank_applicants` proposes an A, B or C tier and a rank for each applicant, with a reason you can check, following the job's own rubric. You accept or change it in the app; a tier you decided is never overwritten. `listing_report` counts A-tier applicants and their cost per listing.
 - **Messages to applicants.** Claude drafts the screening invite, interview invite or rejection from `prep_message`, which hands it the applicant's own screening link and what they've been sent before. Recruited never sends email: you send from your own, with your mail connector or the app's Open in email, and the message is marked sent so the applicant's page shows what they were told and when.
 - **Importing from boards.** Paste or upload an Indeed, LinkedIn or spreadsheet export of applicants and everyone lands in the job at once, counted against the listing they came through. `import_applicants` previews first and never adds anyone twice.
-- **25 MCP tools and 3 prompts** (`post_a_role`, `review_applicants`, `message_applicants`). The app has the screens a person needs to look and adjust: jobs, applicants, one applicant's answers, and Connect Claude.
+- **Interviews and offers.** Rounds with times, formats and who they'll meet; a scorecard per interviewer with a yes or no and evidence; offers kept as versions, so a counter-offer never overwrites what was offered before. Nothing here moves an applicant or decides for you.
+- **29 MCP tools and 3 prompts** (`post_a_role`, `review_applicants`, `message_applicants`). The app has the screens a person needs to look and adjust: jobs, applicants, one applicant's answers, and Connect Claude.
 
 ## Connect your AI
 
