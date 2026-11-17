@@ -136,3 +136,16 @@ glyph. Copied rather than shared because the two sites deploy separately and
 Recruited has no dependency on Hired. Recruited-only rules sit at the bottom of
 styles.css. No pricing and no waitlist on the page: there is no hosted plan and
 no signup backend, so both CTAs go to the deploy guide and the repository.
+
+## 2026-11-17: The app wears the landing page's look
+
+William found the product "mid" and chose a visual rebuild over new features.
+The app now uses the landing page's language: a grey canvas with white cards
+lit by a rim-plus-shadow (`--rt-shadow-card`), segmented controls for stage,
+tier and statuses, toned chips, and one-shot arrival animations (`.rise`,
+`.draw`) that stop for reduced motion. New pieces: `src/components/ui.tsx`
+(icons, headers, stats, empty states, avatars), `nav.tsx`, and `board.tsx`,
+a drag-and-drop pipeline that calls the same `moveStage` action as the
+applicant page. No data or tool changed. A true "replay" of how an answer was
+written was considered and left out: the form promises counts and timings,
+never keystrokes, and a replay would need the keystrokes.

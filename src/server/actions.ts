@@ -69,8 +69,9 @@ export async function setListingStatus(listingId: string, status: ListingStatus)
 
 export async function moveStage(applicationId: string, stage: Stage) {
   const user = await requireUser();
-  await applications.moveStage(user.id, applicationId, stage);
+  const a = await applications.moveStage(user.id, applicationId, stage);
   revalidatePath(`/applications/${applicationId}`);
+  revalidatePath(`/jobs/${a.jobId}`);
 }
 
 export async function addNote(_: ActionState, form: FormData): Promise<ActionState> {

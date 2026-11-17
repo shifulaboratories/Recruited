@@ -27,9 +27,42 @@
   --font-mono: var(--rt-font-mono);
 }
 
+/* Surfaces the app adds on top of the brand kit: the canvas the cards sit on,
+   and the rim-plus-shadow elevation the landing page uses. The canvas is a
+   step darker than a card in light and the plain background in dark, so cards
+   read as lit objects either way. */
+:root {
+  --rt-canvas: oklch(0.966 0.002 265);
+  --rt-rim: var(--rt-border);
+  --rt-shadow-card:
+    0 0 0 1px var(--rt-rim),
+    0 1px 1.5px oklch(0 0 0 / 0.03),
+    0 3px 6px oklch(0 0 0 / 0.025),
+    0 8px 18px oklch(0 0 0 / 0.02);
+  --rt-shadow-raised:
+    0 0 0 1px var(--rt-rim),
+    0 2px 4px oklch(0 0 0 / 0.05),
+    0 8px 20px oklch(0 0 0 / 0.07),
+    0 24px 48px oklch(0 0 0 / 0.08);
+  --rt-settle: cubic-bezier(0.23, 1, 0.32, 1);
+  --rt-enter: cubic-bezier(0.16, 1, 0.3, 1);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --rt-canvas: var(--rt-background);
+    --rt-shadow-card: 0 0 0 1px var(--rt-rim), 0 1px 2px oklch(0 0 0 / 0.3);
+    --rt-shadow-raised: 0 0 0 1px var(--rt-rim), 0 8px 24px oklch(0 0 0 / 0.45);
+  }
+}
+:root[data-theme="dark"] {
+  --rt-canvas: var(--rt-background);
+  --rt-shadow-card: 0 0 0 1px var(--rt-rim), 0 1px 2px oklch(0 0 0 / 0.3);
+  --rt-shadow-raised: 0 0 0 1px var(--rt-rim), 0 8px 24px oklch(0 0 0 / 0.45);
+}
+
 html {
   color-scheme: light dark;
-  background: var(--rt-background);
+  background: var(--rt-canvas);
   color: var(--rt-foreground);
   font-family: var(--rt-font-sans);
   font-feature-settings: "cv02", "cv03", "cv04", "cv11", "ss01";
@@ -37,7 +70,7 @@ html {
   line-height: 1.55;
   -webkit-font-smoothing: antialiased;
 }
-body { background: var(--rt-background); }
+body { background: var(--rt-canvas); }
 ::selection { background: var(--rt-primary-tint); }
 [data-theme="light"] { color-scheme: light; }
 [data-theme="dark"] { color-scheme: dark; }
@@ -46,36 +79,110 @@ body { background: var(--rt-background); }
 .tabular { font-variant-numeric: tabular-nums; }
 .eyebrow {
   font-family: var(--rt-font-mono);
-  font-size: 11px;
+  font-size: 10.5px;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.07em;
   color: var(--rt-faint);
 }
+.h-page { font-size: 26px; font-weight: 600; letter-spacing: -0.025em; line-height: 1.15; }
+.h-section { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
 
-/* Provenance highlight: the colour at 20% behind the text, per the brand kit. */
-.hl-pasted { background: color-mix(in oklch, var(--rt-pasted) 20%, transparent); }
-.hl-ai { background: color-mix(in oklch, var(--rt-ai) 20%, transparent); }
-.hl-injected { background: color-mix(in oklch, var(--rt-pasted) 20%, transparent); text-decoration: underline dotted var(--rt-pasted); }
+/* Provenance highlight: the colour behind the text with an underline in it,
+   per the brand kit. Never red, never a score on its own. */
+.hl-pasted {
+  background: color-mix(in oklch, var(--rt-pasted) 16%, transparent);
+  box-shadow: inset 0 -1.5px 0 color-mix(in oklch, var(--rt-pasted) 70%, transparent);
+  box-decoration-break: clone; -webkit-box-decoration-break: clone;
+}
+.hl-ai {
+  background: color-mix(in oklch, var(--rt-ai) 16%, transparent);
+  box-shadow: inset 0 -1.5px 0 color-mix(in oklch, var(--rt-ai) 70%, transparent);
+  box-decoration-break: clone; -webkit-box-decoration-break: clone;
+}
+.hl-injected { background: color-mix(in oklch, var(--rt-pasted) 16%, transparent); text-decoration: underline dotted var(--rt-pasted); }
 
 .field {
   width: 100%;
   background: var(--rt-surface);
-  border: 1px solid var(--rt-border);
-  border-radius: var(--rt-radius-sm);
+  border: 0;
+  box-shadow: 0 0 0 1px var(--rt-border), 0 1px 1px oklch(0 0 0 / 0.03);
+  border-radius: 8px;
   padding: 8px 10px;
   font: inherit;
   color: inherit;
+  transition: box-shadow 0.15s var(--rt-settle);
 }
-.field:focus { outline: 2px solid var(--rt-primary); outline-offset: -1px; border-color: transparent; }
+.field:hover { box-shadow: 0 0 0 1px color-mix(in oklch, var(--rt-border) 60%, var(--rt-muted)); }
+.field:focus { outline: none; box-shadow: 0 0 0 2px var(--rt-primary); }
+.field::placeholder { color: var(--rt-faint); }
+
 .btn {
-  display: inline-flex; align-items: center; gap: 6px;
-  border-radius: var(--rt-radius-sm); padding: 7px 12px; font-weight: 500;
-  border: 1px solid var(--rt-border); background: var(--rt-surface); color: var(--rt-foreground);
-  cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  height: 32px; border-radius: 8px; padding: 0 12px; font-weight: 500; font-size: 13px;
+  border: 0; background: var(--rt-surface); color: var(--rt-foreground);
+  box-shadow: 0 0 0 1px var(--rt-border), 0 1px 1.5px oklch(0 0 0 / 0.04);
+  cursor: pointer; white-space: nowrap;
+  transition: background 0.15s var(--rt-settle), box-shadow 0.15s var(--rt-settle), transform 0.15s var(--rt-settle);
 }
 .btn:hover { background: var(--rt-subtle); }
-.btn-primary { background: var(--rt-primary); border-color: var(--rt-primary); color: white; }
-.btn-primary:hover { background: var(--rt-primary); filter: brightness(1.08); }
-.card { background: var(--rt-surface); border: 1px solid var(--rt-border); border-radius: var(--rt-radius); }
+.btn:active { transform: translateY(0.5px); }
+.btn:disabled { opacity: 0.6; cursor: default; }
+.btn.text-xs { height: 28px; padding: 0 10px; font-size: 12px; }
+.btn-primary {
+  background: var(--rt-primary); color: white;
+  box-shadow: 0 0 0 1px color-mix(in oklch, var(--rt-primary) 80%, black), inset 0 1px 0 oklch(1 0 0 / 0.18), 0 1px 2px oklch(0 0 0 / 0.12);
+}
+.btn-primary:hover { background: color-mix(in oklch, var(--rt-primary) 90%, white); }
+.btn-quiet { background: transparent; box-shadow: none; color: var(--rt-muted); }
+.btn-quiet:hover { background: var(--rt-subtle); color: var(--rt-foreground); }
+
+.card {
+  background: var(--rt-surface);
+  border-radius: 12px;
+  box-shadow: var(--rt-shadow-card);
+}
+.card-link { transition: box-shadow 0.2s var(--rt-settle), transform 0.2s var(--rt-settle); }
+.card-link:hover { box-shadow: var(--rt-shadow-raised); transform: translateY(-1px); }
+.inset {
+  background: var(--rt-subtle);
+  border-radius: 8px;
+  box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--rt-border) 60%, transparent);
+}
+
+/* A chip: small, mono where it's a label, toned by --tone. */
+.chip {
+  --tone: var(--rt-muted);
+  display: inline-flex; align-items: center; gap: 5px;
+  height: 22px; padding: 0 7px; border-radius: 6px;
+  font-size: 11.5px; font-weight: 500; white-space: nowrap;
+  color: var(--tone);
+  background: color-mix(in oklch, var(--tone) 11%, transparent);
+}
+.chip-mono { font-family: var(--rt-font-mono); font-size: 10.5px; letter-spacing: 0.05em; text-transform: uppercase; }
+.dot { width: 6px; height: 6px; border-radius: 50%; background: var(--tone, currentColor); flex-shrink: 0; }
+
+/* Segmented control: stages, tiers, statuses. */
+.seg { display: inline-flex; flex-wrap: wrap; gap: 2px; padding: 2px; border-radius: 9px; background: var(--rt-subtle); }
+.seg button {
+  height: 26px; padding: 0 9px; border-radius: 7px; font-size: 12px; font-weight: 500;
+  color: var(--rt-muted); transition: background 0.15s var(--rt-settle), color 0.15s var(--rt-settle);
+}
+.seg button:hover { color: var(--rt-foreground); }
+.seg button[aria-pressed="true"] { background: var(--rt-surface); color: var(--rt-foreground); box-shadow: var(--rt-shadow-card); }
+
 a.link { color: var(--rt-primary); }
 a.link:hover { text-decoration: underline; }
+
+details > summary { list-style: none; }
+details > summary::-webkit-details-marker { display: none; }
+
+/* Arrival: things rise into place once when a page loads, staggered by --i.
+   Nothing loops, and nothing moves for anyone who asked for calm. */
+@keyframes rt-rise { from { opacity: 0; transform: translateY(6px); } }
+@keyframes rt-grow { from { transform: scaleX(0); } }
+.rise { animation: rt-rise 0.5s var(--rt-enter) both; animation-delay: calc(var(--i, 0) * 45ms); }
+.draw { transform-origin: left center; animation: rt-grow 0.8s var(--rt-enter) both; animation-delay: calc(var(--i, 0) * 60ms + 150ms); }
+@media (prefers-reduced-motion: reduce) {
+  .rise, .draw { animation: none; }
+  .card-link:hover, .btn:active { transform: none; }
+}

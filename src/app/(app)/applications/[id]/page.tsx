@@ -23,7 +23,8 @@ import { ActionForm, CopyButton, DateTimeInput, LocalTime } from "@/components/f
 import { interviewsAndOffers } from "@/lib/data/interviews";
 import { OFFER_TERM_LABEL, RECOMMENDATION_LABEL, RECOMMENDATIONS } from "@/lib/scorecards";
 import { KIND_LABEL, MAILTO_SAFE_LENGTH, MESSAGE_KINDS, mailtoLink } from "@/lib/messages";
-import { OriginBadge, ProvenanceBar, QualifiedChip, StyleBadge, TierChip } from "@/components/provenance";
+import { ArrivalBar, OriginBadge, ProvenanceBar, QualifiedChip, STAGE_LABEL, STAGE_TONE, StyleBadge, TierChip, tierTone } from "@/components/provenance";
+import { Avatar, Icon, SectionHead } from "@/components/ui";
 
 function minutes(ms: number) {
   const m = Math.round(ms / 60000);
@@ -36,101 +37,127 @@ export default async function ApplicationPage({ params }: { params: Promise<{ id
   const a = await getApplication(user.id, id);
   const io = await interviewsAndOffers(user.id, id);
   const latestOffer = io.offers.at(-1);
+  const board = a.listing ? `${boardByKey(a.listing.board)?.name ?? a.listing.board} · listing ${a.listing.variant}` : a.source || "added by hand";
+  const tone = tierTone(a.effectiveTier);
   return (
-    <div className="space-y-8">
-      <header className="space-y-2">
-        <p className="eyebrow">
-          <Link href={`/jobs/${a.job.id}`} className="hover:text-rt-foreground">
-            {a.job.title}
-          </Link>{" "}
-          · {a.listing ? `${boardByKey(a.listing.board)?.name ?? a.listing.board} ${a.listing.variant}` : a.source || "added by hand"}
-        </p>
-        <h1 className="text-2xl font-semibold tracking-tight">{a.candidate.name}</h1>
-        <p className="text-rt-muted">
-          {a.candidate.email}
-          {a.candidate.phone && ` · ${a.candidate.phone}`}
-          {a.candidate.links.map((l) => (
-            <a key={l} href={l} className="link ml-2" target="_blank" rel="noreferrer">
-              {l.replace(/^https?:\/\//, "").slice(0, 40)}
+    <div className="space-y-6">
+      <Link href={`/jobs/${a.job.id}`} className="rise inline-flex items-center gap-1 text-[12.5px] text-rt-muted hover:text-rt-foreground">
+        <Icon name="chevron" size={13} className="rotate-180" />
+        {a.job.title}
+      </Link>
+
+      <header className="card rise p-5 sm:p-6 flex flex-wrap items-center gap-5" style={{ boxShadow: tone ? `var(--rt-shadow-card), inset 0 3px 0 ${tone}` : undefined }}>
+        <Avatar name={a.candidate.name} tone={tone} size={52} />
+        <div className="flex-1 min-w-[220px] space-y-1">
+          <h1 className="h-page">{a.candidate.name}</h1>
+          <p className="text-rt-muted text-[13px] flex flex-wrap items-center gap-x-3 gap-y-1">
+            <a className="hover:text-rt-foreground inline-flex items-center gap-1.5" href={`mailto:${a.candidate.email}`}>
+              <Icon name="mail" size={13} />
+              {a.candidate.email}
             </a>
-          ))}
-        </p>
-        <div className="flex flex-wrap items-center gap-4">
+            {a.candidate.phone && <span>{a.candidate.phone}</span>}
+            {a.candidate.links.map((l) => (
+              <a key={l} href={l} className="link inline-flex items-center gap-1" target="_blank" rel="noreferrer">
+                <Icon name="link" size={12} />
+                {l.replace(/^https?:\/\//, "").slice(0, 40)}
+              </a>
+            ))}
+          </p>
+          <p className="text-[12px] text-rt-faint">
+            Applied {a.appliedAt.toLocaleDateString("en-US", { month: "short", day: "numeric" })} via {board}
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
           <TierChip tier={a.effectiveTier} proposal={a.tierIsProposal} rank={a.proposal?.rank} />
           <QualifiedChip qualified={a.qualified} />
-          <ProvenanceBar r={a.provenance} />
         </div>
-        <div className="flex flex-wrap gap-1 pt-2">
-          {STAGES.map((s) => (
-            <form key={s} action={moveStage.bind(null, a.id, s)}>
-              <button
-                className={`font-mono text-[11px] uppercase tracking-wide rounded px-2 py-1 border ${
-                  a.stage === s ? "border-rt-primary bg-rt-primary-tint text-rt-primary" : "border-rt-border text-rt-muted hover:text-rt-foreground"
-                }`}
-              >
-                {s.toLowerCase()}
-              </button>
-            </form>
-          ))}
-        </div>
-      </header>
-
-      <section className="card p-4 space-y-3">
-        <div className="flex flex-wrap items-center gap-3">
-          <h2 className="font-semibold">Tier</h2>
-          <div className="flex gap-1">
-            {TIERS.map((t) => (
-              <form key={t} action={setTier.bind(null, a.id, t)}>
-                <button
-                  className={`font-mono text-xs w-8 h-7 rounded border ${a.tier === t ? "border-rt-primary bg-rt-primary-tint text-rt-primary" : "border-rt-border text-rt-muted hover:text-rt-foreground"}`}
-                  aria-pressed={a.tier === t}
-                >
-                  {t}
+        <div className="basis-full">
+          <div className="seg" role="group" aria-label="Stage">
+            {STAGES.map((s) => (
+              <form key={s} action={moveStage.bind(null, a.id, s)}>
+                <button aria-pressed={a.stage === s} className="inline-flex items-center gap-1.5" style={{ ["--tone" as string]: STAGE_TONE[s] }}>
+                  {a.stage === s && <span className="dot" />}
+                  {STAGE_LABEL[s]}
                 </button>
               </form>
             ))}
-            {a.tier && (
-              <form action={setTier.bind(null, a.id, null)}>
-                <button className="text-xs text-rt-muted hover:text-rt-foreground px-2 h-7">Clear</button>
-              </form>
-            )}
           </div>
-          <span className="text-xs text-rt-faint">
-            {a.tier ? `Decided${a.tierBy === "mcp" ? " through Claude" : ""}.` : "Not decided yet."} A: worth a call this week. B: call if the A&apos;s run out. C: not this time.
-          </span>
         </div>
-        {a.tierReason && <p className="text-rt-muted">{a.tierReason}</p>}
-        {a.proposal && !(a.tier === a.proposal.tier && a.tierReason === a.proposal.reason) && (
-          <div className="flex flex-wrap items-start gap-3 rounded bg-rt-subtle p-3">
-            <TierChip tier={a.proposal.tier} proposal rank={a.proposal.rank} />
-            <p className="flex-1 min-w-[200px] text-rt-muted">
-              <span className="text-rt-foreground">Claude&apos;s proposal: </span>
-              {a.proposal.reason}
-            </p>
-            {a.tier !== a.proposal.tier && (
-              <form action={acceptProposal.bind(null, a.id)}>
-                <button className="btn text-xs">Accept {a.proposal.tier}</button>
-              </form>
-            )}
-          </div>
-        )}
-      </section>
+      </header>
 
-      {a.submissions.length === 0 && <p className="text-rt-muted">No forms filled in yet.</p>}
+      <div className="grid lg:grid-cols-[minmax(0,1fr)_320px] gap-6 items-start">
+      <aside className="space-y-4 lg:sticky lg:top-6 lg:order-2">
+        <section className="card rise p-5 space-y-3" style={{ ["--i" as string]: 1 }}>
+          <div className="flex items-center gap-2">
+            <h2 className="h-section flex-1">Tier</h2>
+            <div className="seg" role="group" aria-label="Tier">
+              {TIERS.map((t) => (
+                <form key={t} action={setTier.bind(null, a.id, t)}>
+                  <button aria-pressed={a.tier === t} className="w-8" style={a.tier === t ? { color: tierTone(t) } : undefined}>
+                    {t}
+                  </button>
+                </form>
+              ))}
+            </div>
+          </div>
+          <p className="text-[12px] text-rt-faint">
+            {a.tier ? `Decided${a.tierBy === "mcp" ? " through Claude" : ""}. ` : "Not decided yet. "}A: worth a call this week. B: if the A&apos;s run out. C: not this time.
+          </p>
+          {a.tierReason && <p className="text-rt-muted text-[13px]">{a.tierReason}</p>}
+          {a.proposal && !(a.tier === a.proposal.tier && a.tierReason === a.proposal.reason) && (
+            <div className="inset p-3 space-y-2.5">
+              <div className="flex items-center gap-2">
+                <Icon name="sparkle" size={13} className="text-rt-ai" />
+                <span className="text-[12.5px] font-medium flex-1">Claude proposes</span>
+                <TierChip tier={a.proposal.tier} proposal rank={a.proposal.rank} />
+              </div>
+              <p className="text-rt-muted text-[13px]">{a.proposal.reason}</p>
+              <div className="flex gap-2">
+                {a.tier !== a.proposal.tier && (
+                  <form action={acceptProposal.bind(null, a.id)}>
+                    <button className="btn btn-primary text-xs">Accept {a.proposal.tier}</button>
+                  </form>
+                )}
+                {a.tier && (
+                  <form action={setTier.bind(null, a.id, null)}>
+                    <button className="btn btn-quiet text-xs">Clear my tier</button>
+                  </form>
+                )}
+              </div>
+            </div>
+          )}
+        </section>
+
+        <section className="card rise p-5 space-y-3" style={{ ["--i" as string]: 2 }}>
+          <h2 className="h-section">How the answers arrived</h2>
+          <ProvenanceBar r={a.provenance} />
+          <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11.5px] text-rt-muted">
+            <span className="inline-flex items-center gap-1.5" style={{ ["--tone" as string]: "var(--rt-typed)" }}><span className="dot" />Typed</span>
+            <span className="inline-flex items-center gap-1.5" style={{ ["--tone" as string]: "var(--rt-pasted)" }}><span className="dot" />Pasted</span>
+            <span className="inline-flex items-center gap-1.5" style={{ ["--tone" as string]: "var(--rt-ai)" }}><span className="dot" />Likely AI</span>
+          </div>
+          <p className="text-[11.5px] text-rt-faint leading-snug">
+            What the browser saw, not proof of who wrote it. Style labels misfire on second-language writers and grammar tools; ask on the call.
+          </p>
+        </section>
+      </aside>
+
+      <div className="space-y-10 min-w-0 lg:order-1">
+      {a.submissions.length === 0 && <p className="card p-5 text-rt-muted">No forms filled in yet.</p>}
 
       {a.submissions.map((s) => {
         const failed = (s.failedKnockouts as KnockoutResult[]) ?? [];
         return (
           <section key={s.id} className="space-y-3">
             <div className="flex flex-wrap items-baseline gap-x-3">
-              <h2 className="font-semibold">{s.form.name}</h2>
+              <h2 className="h-section">{s.form.name}</h2>
               <span className="text-xs text-rt-faint">
                 {s.submittedAt.toLocaleDateString("en-US", { month: "short", day: "numeric" })} · took {minutes(s.durationMs)}
                 {!s.recorded && " · not recorded (the page's script didn't run)"}
               </span>
             </div>
             {failed.length > 0 && (
-              <div className="text-xs text-rt-muted">
+              <div className="text-[12.5px] text-rt-muted inset px-3 py-2">
                 Missed {failed.length === 1 ? "a must-have" : `${failed.length} must-haves`}:{" "}
                 {failed.map((f) => `${f.label} (answered "${f.answer}", needs ${f.expected})`).join("; ")}
               </div>
@@ -141,8 +168,8 @@ export default async function ApplicationPage({ params }: { params: Promise<{ id
                 const written = x.origin !== "UNKNOWN" || signals.length > 0;
                 const hl = x.style.score >= 0.5 ? "hl-ai" : x.origin === "PASTED" || x.origin === "INJECTED" ? "hl-pasted" : "";
                 return (
-                  <li key={x.questionId} className="card p-4 space-y-2">
-                    <div className="text-rt-muted">{x.question}</div>
+                  <li key={x.questionId} className="card rise p-5 space-y-3">
+                    <div className="text-[12.5px] font-medium text-rt-muted">{x.question}</div>
                     {x.files.length > 0 ? (
                       <div className="flex flex-wrap gap-3">
                         {x.files.map((f) => (
@@ -160,12 +187,13 @@ export default async function ApplicationPage({ params }: { params: Promise<{ id
                         ))}
                       </div>
                     ) : (
-                      <div className="whitespace-pre-wrap">
+                      <div className="whitespace-pre-wrap text-[14.5px] leading-relaxed">
                         {x.answer ? <span className={`rounded-sm ${hl}`}>{x.answer}</span> : <span className="text-rt-faint">No answer</span>}
                       </div>
                     )}
                     {written && x.answer && (
-                      <div className="space-y-1 pt-1">
+                      <div className="space-y-2 pt-1">
+                        <ArrivalBar pastedShare={x.pastedShare} ai={x.style.score >= 0.5} />
                         <div className="flex flex-wrap items-center gap-2">
                           <OriginBadge origin={x.origin} />
                           <StyleBadge score={x.style.score} label={x.style.label} />
@@ -173,7 +201,7 @@ export default async function ApplicationPage({ params }: { params: Promise<{ id
                         </div>
                         {signals.length > 0 && (
                           <details className="text-xs text-rt-muted">
-                            <summary className="cursor-pointer">Why the style label says that</summary>
+                            <summary className="cursor-pointer text-rt-ai hover:underline">Why the style label says that</summary>
                             <ul className="list-disc pl-4 mt-1">
                               {signals.map((sig) => (
                                 <li key={sig.key}>
@@ -198,7 +226,7 @@ export default async function ApplicationPage({ params }: { params: Promise<{ id
 
       <section className="space-y-3">
         <div className="flex flex-wrap items-baseline gap-x-3">
-          <h2 className="font-semibold">Interviews</h2>
+          <h2 className="h-section">Interviews</h2>
           {io.panel.scorecards > 0 && (
             <span className="text-xs text-rt-muted">
               {io.panel.yes} yes, {io.panel.no} no across {io.panel.scorecards} scorecard{io.panel.scorecards === 1 ? "" : "s"}
@@ -207,9 +235,9 @@ export default async function ApplicationPage({ params }: { params: Promise<{ id
             </span>
           )}
         </div>
-        {io.interviews.length === 0 && <p className="text-rt-muted">No interviews yet. Ask Claude to schedule one, or add it below.</p>}
+        {io.interviews.length === 0 && <p className="card p-5 text-rt-muted">No interviews yet. Ask Claude to schedule one, or add it below.</p>}
         {io.interviews.map((iv) => (
-          <div key={iv.id} className={`card p-4 space-y-3 ${iv.status === "CANCELLED" ? "opacity-60" : ""}`}>
+          <div key={iv.id} className={`card p-5 space-y-3 ${iv.status === "CANCELLED" ? "opacity-60" : ""}`}>
             <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
               <span className="font-mono text-[11px] uppercase tracking-wide text-rt-muted">Round {iv.round}</span>
               <span className="font-medium">{iv.title}</span>
@@ -230,21 +258,17 @@ export default async function ApplicationPage({ params }: { params: Promise<{ id
                 )}
               </div>
             )}
-            <div className="flex flex-wrap gap-1">
+            <div className="seg" role="group" aria-label="Interview status">
               {(["SCHEDULED", "DONE", "CANCELLED", "NO_SHOW"] as const).map((st) => (
                 <form key={st} action={setInterviewStatus.bind(null, a.id, iv.id, st)}>
-                  <button
-                    className={`font-mono text-[11px] uppercase tracking-wide rounded px-2 py-1 border ${
-                      iv.status === st ? "border-rt-primary bg-rt-primary-tint text-rt-primary" : "border-rt-border text-rt-muted hover:text-rt-foreground"
-                    }`}
-                  >
-                    {st.replace("_", " ").toLowerCase()}
+                  <button aria-pressed={iv.status === st}>
+                    {{ SCHEDULED: "Scheduled", DONE: "Done", CANCELLED: "Cancelled", NO_SHOW: "No-show" }[st]}
                   </button>
                 </form>
               ))}
             </div>
             {iv.scorecards.map((c) => (
-              <div key={c.id} className="rounded bg-rt-subtle p-3 space-y-1">
+              <div key={c.id} className="inset p-3 space-y-1">
                 <div className="flex flex-wrap items-center gap-2 text-xs">
                   <span className="font-medium text-rt-foreground">{c.interviewer}</span>
                   <span className="font-mono uppercase tracking-wide text-rt-muted">{RECOMMENDATION_LABEL[c.recommendation]}</span>
@@ -265,7 +289,7 @@ export default async function ApplicationPage({ params }: { params: Promise<{ id
             ))}
             {iv.status !== "CANCELLED" && (
               <details className="text-sm">
-                <summary className="cursor-pointer text-rt-muted hover:text-rt-foreground">Add a scorecard</summary>
+                <summary className="btn btn-quiet text-xs cursor-pointer">Add a scorecard</summary>
                 <ActionForm action={addScorecardAction} submit="Save scorecard" className="pt-3">
                   <input type="hidden" name="applicationId" value={a.id} />
                   <input type="hidden" name="interviewId" value={iv.id} />
@@ -284,7 +308,7 @@ export default async function ApplicationPage({ params }: { params: Promise<{ id
           </div>
         ))}
         <details className="text-sm">
-          <summary className="cursor-pointer text-rt-muted hover:text-rt-foreground">Add an interview</summary>
+          <summary className="btn btn-quiet text-xs cursor-pointer">Add an interview</summary>
           <ActionForm action={addInterviewAction} submit="Add round" className="pt-3">
             <input type="hidden" name="applicationId" value={a.id} />
             <input className="field" name="title" placeholder="Screening call, work sample review, final with the founder" />
@@ -304,12 +328,12 @@ export default async function ApplicationPage({ params }: { params: Promise<{ id
       </section>
 
       <section className="space-y-3">
-        <h2 className="font-semibold">Offer</h2>
-        {!latestOffer && <p className="text-rt-muted">No offer yet.</p>}
+        <h2 className="h-section">Offer</h2>
+        {!latestOffer && <p className="card p-5 text-rt-muted">No offer yet.</p>}
         {[...io.offers].reverse().map((o) => {
           const latest = o.id === latestOffer?.id;
           return (
-            <div key={o.id} className={`card p-4 space-y-2 ${latest ? "" : "opacity-70"}`}>
+            <div key={o.id} className={`card p-5 space-y-2 ${latest ? "" : "opacity-70"}`}>
               <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
                 <span className="font-mono text-[11px] uppercase tracking-wide text-rt-muted">Version {o.version}</span>
                 <span className="font-medium">{o.title}</span>
@@ -344,16 +368,10 @@ export default async function ApplicationPage({ params }: { params: Promise<{ id
               </dl>
               {o.terms && <p className="text-rt-muted whitespace-pre-wrap">{o.terms}</p>}
               {latest && (
-                <div className="flex flex-wrap gap-1 pt-1">
+                <div className="seg" role="group" aria-label="Offer status">
                   {(["DRAFT", "EXTENDED", "ACCEPTED", "DECLINED", "WITHDRAWN"] as const).map((st) => (
                     <form key={st} action={setOfferStatusAction.bind(null, a.id, o.id, st)}>
-                      <button
-                        className={`font-mono text-[11px] uppercase tracking-wide rounded px-2 py-1 border ${
-                          o.status === st ? "border-rt-primary bg-rt-primary-tint text-rt-primary" : "border-rt-border text-rt-muted hover:text-rt-foreground"
-                        }`}
-                      >
-                        {st.toLowerCase()}
-                      </button>
+                      <button aria-pressed={o.status === st}>{st.charAt(0) + st.slice(1).toLowerCase()}</button>
                     </form>
                   ))}
                 </div>
@@ -362,7 +380,7 @@ export default async function ApplicationPage({ params }: { params: Promise<{ id
           );
         })}
         <details className="text-sm">
-          <summary className="cursor-pointer text-rt-muted hover:text-rt-foreground">{latestOffer ? "Change the terms (saves a new version)" : "Write an offer"}</summary>
+          <summary className="btn btn-quiet text-xs cursor-pointer">{latestOffer ? "Change the terms (saves a new version)" : "Write an offer"}</summary>
           <ActionForm action={recordOfferAction} submit="Save version" className="pt-3">
             <input type="hidden" name="applicationId" value={a.id} />
             <p className="text-xs text-rt-faint">{latestOffer ? "Leave a field empty to keep it as it is." : "Leave a field empty if it isn't decided yet."}</p>
@@ -394,16 +412,16 @@ export default async function ApplicationPage({ params }: { params: Promise<{ id
 
       <section className="space-y-3">
         <div className="flex flex-wrap items-baseline gap-x-3">
-          <h2 className="font-semibold">Messages</h2>
+          <h2 className="h-section">Messages</h2>
           <span className="text-xs text-rt-faint">Recruited never sends email. Open a draft in your own email, send it there, then mark it sent.</span>
         </div>
-        {a.messages.length === 0 && <p className="text-rt-muted">Nothing sent yet. Ask Claude to draft a screening invite, an interview invite or a rejection, or write one below.</p>}
+        {a.messages.length === 0 && <p className="card p-5 text-rt-muted">Nothing sent yet. Ask Claude to draft a screening invite, an interview invite or a rejection, or write one below.</p>}
         {a.messages.map((m) => {
           const mailto = mailtoLink(a.candidate.email, m.subject, m.body);
           const draft = m.status === "DRAFT";
           const day = (d: Date) => d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
           return (
-            <div key={m.id} className={`card p-4 space-y-2 ${draft ? "border-dashed" : ""}`}>
+            <div key={m.id} className={`card p-5 space-y-2 ${draft ? "outline-dashed outline-1 outline-rt-border" : ""}`}>
               <div className="flex flex-wrap items-center gap-2 text-xs">
                 <span className="font-mono uppercase tracking-wide text-rt-muted">{KIND_LABEL[m.kind]}</span>
                 <span className={draft ? "text-rt-muted" : "text-rt-foreground"}>
@@ -436,7 +454,7 @@ export default async function ApplicationPage({ params }: { params: Promise<{ id
           );
         })}
         <details className="text-sm">
-          <summary className="cursor-pointer text-rt-muted hover:text-rt-foreground">Write a message yourself</summary>
+          <summary className="btn btn-quiet text-xs cursor-pointer">Write a message yourself</summary>
           <ActionForm action={saveMessageDraft} submit="Save draft" className="pt-3">
             <input type="hidden" name="applicationId" value={a.id} />
             <select name="kind" className="field" defaultValue="OTHER">
@@ -453,9 +471,9 @@ export default async function ApplicationPage({ params }: { params: Promise<{ id
       </section>
 
       <section className="space-y-3">
-        <h2 className="font-semibold">Notes</h2>
+        <h2 className="h-section">Notes</h2>
         {a.notes.map((n) => (
-          <div key={n.id} className="card p-3">
+          <div key={n.id} className="card p-4">
             <div className="whitespace-pre-wrap">{n.body}</div>
             <div className="text-xs text-rt-faint mt-1">
               {n.writtenBy === "mcp" ? "From Claude" : "You"} · {n.at.toLocaleDateString("en-US", { month: "short", day: "numeric" })}
@@ -467,6 +485,8 @@ export default async function ApplicationPage({ params }: { params: Promise<{ id
           <textarea className="field min-h-20" name="body" placeholder="A call summary, a reference, why you moved them." />
         </ActionForm>
       </section>
+      </div>
+      </div>
     </div>
   );
 }
