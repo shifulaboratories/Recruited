@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { requireUser } from "@/lib/auth";
 import { listApplications } from "@/lib/data/applications";
-import { ProvenanceBar, QualifiedChip, StageChip } from "@/components/provenance";
+import { ProvenanceBar, QualifiedChip, StageChip, TierChip } from "@/components/provenance";
 
 export const metadata = { title: "Applicants" };
 
@@ -21,6 +21,9 @@ export default async function ApplicationsPage() {
           {applications.map((a) => (
             <li key={a.id}>
               <Link href={`/applications/${a.id}`} className="flex flex-wrap items-center gap-x-6 gap-y-2 p-4 hover:bg-rt-subtle">
+                <div className="w-28 shrink-0">
+                  <TierChip tier={a.effectiveTier} proposal={a.tierIsProposal} rank={a.proposal?.rank} />
+                </div>
                 <div className="flex-1 min-w-[180px]">
                   <div className="font-medium">{a.candidate}</div>
                   <div className="text-xs text-rt-muted">

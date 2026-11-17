@@ -87,6 +87,8 @@ model Job {
   salaryPeriod   String    @default("year")
   /// Markdown. The canonical description; listings are adapted from it.
   description    String    @default("")
+  /// What makes an A, B or C applicant for this role, in the hiring person's words. Read by rank_applicants.
+  rubric         String    @default("")
   status         JobStatus @default(DRAFT)
   archivedAt     DateTime?
   createdAt      DateTime  @default(now())
@@ -182,6 +184,13 @@ model Candidate {
   @@unique([userId, email])
 }
 
+/// How strong an applicant is for this job. Data, never decoration: see brand/BRAND.md.
+enum Tier {
+  A
+  B
+  C
+}
+
 enum Stage {
   NEW
   SCREEN
@@ -203,6 +212,18 @@ model Application {
   stage       Stage     @default(NEW)
   /// Whether every knockout question so far was answered acceptably. Null when no form had one.
   qualified   Boolean?
+  /// The tier a person decided (in the app, or by telling their assistant). Null until then.
+  tier           Tier?
+  tierReason     String    @default("")
+  /// "app" or "mcp": where the decision was made.
+  tierBy         String    @default("")
+  tierAt         DateTime?
+  /// What an assistant proposed with rank_applicants. Never overwrites tier.
+  proposedTier   Tier?
+  proposedReason String    @default("")
+  /// 1 is the strongest in the job, from the last ranking.
+  proposedRank   Int?
+  proposedAt     DateTime?
   /// A private token for the screening link sent to this applicant.
   screenToken String    @unique
   archivedAt  DateTime?

@@ -80,7 +80,9 @@ export async function getListing(userId: string, listingId: string, baseUrl: str
 
 /**
  * Every listing of a job side by side: applicants, how many met the
- * must-haves, how far they got, and what each cost. This is the split-test
+ * must-haves, their tiers, how far they got, and what each cost. Tiers count
+ * the person's decision where there is one and the assistant's proposal where
+ * not; `proposalsOnly` says how many of the count are still proposals. This is the split-test
  * view: the listing with more applicants is often not the one that brought the
  * people worth hiring.
  */
@@ -89,7 +91,7 @@ export async function listingReport(userId: string, jobId: string) {
   const listings = await db.listing.findMany({
     where: { userId, jobId: job.id },
     orderBy: [{ board: "asc" }, { variant: "asc" }],
-    include: { applications: { where: { archivedAt: null }, select: { stage: true, qualified: true } } },
+    include: { applications: { where: { archivedAt: null }, select: { stage: true, qualified: true, tier: true, proposedTier: true } } },
   });
   const unattributed = await db.application.count({ where: { userId, jobId: job.id, listingId: null, archivedAt: null } });
   const rows = listings.map((l) => {
@@ -97,6 +99,13 @@ export async function listingReport(userId: string, jobId: string) {
     const qualified = apps.filter((a) => a.qualified === true).length;
     const advanced = apps.filter((a) => ["INTERVIEW", "OFFER", "HIRED"].includes(a.stage)).length;
     const hired = apps.filter((a) => a.stage === "HIRED").length;
+    const tiers = { A: 0, B: 0, C: 0, unranked: 0, proposalsOnly: 0 };
+    for (const a of apps) {
+      const t = a.tier ?? a.proposedTier;
+      if (t) tiers[t]++;
+      else tiers.unranked++;
+      if (!a.tier && a.proposedTier) tiers.proposalsOnly++;
+    }
     const spend = l.spendCents / 100;
     return {
       listingId: l.id,
@@ -111,6 +120,9 @@ export async function listingReport(userId: string, jobId: string) {
       spend,
       costPerApplicant: apps.length && spend ? Math.round((spend / apps.length) * 100) / 100 : null,
       costPerQualified: qualified && spend ? Math.round((spend / qualified) * 100) / 100 : null,
+      tiers,
+      costPerATier: tiers.A && spend ? Math.round((spend / tiers.A) * 100) / 100 : null,
+      aTierPerHundred: spend ? Math.round((tiers.A / spend) * 100 * 100) / 100 : null,
     };
   });
   return { jobId: job.id, title: job.title, currency: job.salaryCurrency, listings: rows, unattributed };

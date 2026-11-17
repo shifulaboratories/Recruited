@@ -1,6 +1,6 @@
 "use server";
 
-import type { JobStatus, ListingStatus, Stage } from "@prisma/client";
+import type { JobStatus, ListingStatus, Stage, Tier } from "@prisma/client";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createSession, destroySession, requireUser } from "@/lib/auth";
@@ -96,4 +96,18 @@ export async function rotateConnection(connectionId: string) {
   const user = await requireUser();
   await connections.rotateConnection(user.id, connectionId);
   revalidatePath("/settings");
+}
+
+export async function setTier(applicationId: string, tier: Tier | null) {
+  const user = await requireUser();
+  const a = await applications.setTier(user.id, applicationId, tier, "", "app");
+  revalidatePath(`/applications/${applicationId}`);
+  revalidatePath(`/jobs/${a.jobId}`);
+}
+
+export async function acceptProposal(applicationId: string) {
+  const user = await requireUser();
+  const a = await applications.acceptProposal(user.id, applicationId);
+  revalidatePath(`/applications/${applicationId}`);
+  revalidatePath(`/jobs/${a.jobId}`);
 }

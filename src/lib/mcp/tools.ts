@@ -1,4 +1,4 @@
-import type { JobStatus, ListingStatus, Stage, User } from "@prisma/client";
+import type { JobStatus, ListingStatus, Stage, Tier, User } from "@prisma/client";
 import * as jobs from "@/lib/data/jobs";
 import * as listings from "@/lib/data/listings";
 import * as forms from "@/lib/data/forms";
@@ -66,6 +66,13 @@ function n(args: Json, key: string): number | undefined {
 const STAGE_VALUES = ["NEW", "SCREEN", "INTERVIEW", "OFFER", "HIRED", "REJECTED"] as const;
 const LISTING_STATUS = ["DRAFT", "LIVE", "PAUSED", "CLOSED"] as const;
 const JOB_STATUS = ["DRAFT", "OPEN", "CLOSED"] as const;
+const TIER_VALUES = ["A", "B", "C"] as const;
+
+/** The default meaning of a tier, used when a job has no rubric of its own. */
+const TIER_MEANING =
+  "A: meets every must-have and the answers show they've done this work; worth a call this week. " +
+  "B: plausible, but evidence is thin or one thing is missing; call if the A's run out. " +
+  "C: misses a must-have, or nothing in the application speaks to the job.";
 
 const QUESTION_SCHEMA = {
   type: "array",
@@ -104,6 +111,9 @@ const JOB_FIELDS = {
   description: str(
     "Markdown: headings, bullets, **bold**, links. The canonical description every listing is adapted from: what they'll do, what they need, pay and how you work.",
   ),
+  rubric: str(
+    "What makes an A, B or C applicant for this role, in the person's own words: 'A has run a support inbox solo and writes clear, warm replies'. rank_applicants follows it. Ask for it rather than inventing one.",
+  ),
 };
 
 function jobInput(args: Json): jobs.JobInput {
@@ -118,6 +128,7 @@ function jobInput(args: Json): jobs.JobInput {
     salaryCurrency: s(args, "salary_currency"),
     salaryPeriod: s(args, "salary_period"),
     description: s(args, "description"),
+    rubric: s(args, "rubric"),
     status: s(args, "status") as JobStatus | undefined,
   };
 }
@@ -287,8 +298,9 @@ export const TOOLS: McpTool[] = [
     name: "listing_report",
     title: "Compare listings",
     description:
-      "Every listing of one job side by side: applicants, how many met the must-haves, how many reached interview, hires, spend, and cost per applicant and per qualified applicant. " +
-      "Reach for it for 'which board is working', 'did variant B beat A', 'where should I spend'. Judge on qualified and interviewed, not raw applicants. Small numbers are small: say so before calling a winner.",
+      "Every listing of one job side by side: applicants, how many met the must-haves, tiers (A, B, C, unranked), how many reached interview, hires, spend, and cost per applicant, per qualified applicant and per A-tier applicant. " +
+      "Reach for it for 'which board is working', 'did variant B beat A', 'where should I spend'. Judge on A-tier and qualified applicants, not raw volume. " +
+      "Tier counts include assistant proposals the person hasn't decided on (tiers.proposalsOnly says how many); say so. Small numbers are small: say so before calling a winner.",
     inputSchema: object({ job_id: str("The job's id.") }, ["job_id"]),
     annotations: READ,
     handler: async (args, ctx) => listings.listingReport(ctx.userId, need(args, "job_id")),
@@ -361,13 +373,15 @@ export const TOOLS: McpTool[] = [
     name: "list_applications",
     title: "List applications",
     description:
-      "Applicants, newest first, one row each: job, stage, where they came from, whether they met the must-haves, and a provenance roll-up of their written answers (how many typed, pasted, injected, and likely written with AI). " +
+      "Applicants, newest first, one row each: job, stage, tier (decided and proposed), where they came from, whether they met the must-haves, and a provenance roll-up of their written answers (how many typed, pasted, injected, and likely written with AI). " +
       "Use it for 'who applied this week', 'who's waiting in NEW'. Read get_application before judging anyone. Capped at 100 unless you raise limit; the result says the total.",
     inputSchema: object({
       job_id: str("Only this job."),
       stage: oneOf(STAGE_VALUES, "Only this stage."),
       listing_id: str("Only applicants this listing brought."),
       qualified: bool("true: only those who met every knockout; false: only those who missed one."),
+      tier: oneOf(TIER_VALUES, "Only this tier: the person's decision, or the proposal where they haven't decided."),
+      sort: oneOf(["newest", "tier"], "newest (default), or tier: decided A first, then proposals, by rank."),
       limit: num("Rows to return, up to 500."),
     }),
     annotations: READ,
@@ -377,6 +391,8 @@ export const TOOLS: McpTool[] = [
         stage: s(args, "stage") as Stage | undefined,
         listingId: s(args, "listing_id"),
         qualified: typeof args.qualified === "boolean" ? args.qualified : undefined,
+        tier: s(args, "tier") as Tier | undefined,
+        sort: s(args, "sort") as "newest" | "tier" | undefined,
         limit: n(args, "limit"),
       }),
   },
@@ -393,6 +409,63 @@ export const TOOLS: McpTool[] = [
     handler: async (args, ctx) => {
       const { screenToken: _t, ...rest } = await applications.getApplication(ctx.userId, need(args, "application_id"));
       return rest;
+    },
+  },
+  {
+    name: "rank_applicants",
+    title: "Rank applicants",
+    description:
+      "Propose a tier (A, B or C) for applicants of one job, strongest first; the order you send is the rank. Saves PROPOSALS only: the person accepts or changes them in the app, and a tier they decided is never overwritten. " +
+      "Before calling: get_job for the rubric and must-haves, then get_application for every applicant you rank. Use the job's rubric when it has one; otherwise " +
+      TIER_MEANING +
+      " Each reason names what in their application put them there, in a sentence the person can check. Provenance alone never moves anyone down a tier: weigh what they said, and suggest a follow-up question where an answer was pasted or likely written with AI. " +
+      "Rank everyone you've read, not just the top. Returns which applicants already have a decided tier, so you can mention where you disagree.",
+    inputSchema: object(
+      {
+        job_id: str("The job's id."),
+        rankings: {
+          type: "array",
+          description: "Strongest first. Each: { application_id, tier: A|B|C, reason }.",
+          items: {
+            type: "object",
+            properties: { application_id: { type: "string" }, tier: { type: "string", enum: TIER_VALUES }, reason: { type: "string" } },
+            required: ["application_id", "tier", "reason"],
+          },
+        },
+      },
+      ["job_id", "rankings"],
+    ),
+    annotations: SET,
+    handler: async (args, ctx) => {
+      if (!Array.isArray(args.rankings)) throw new UserError("rankings must be a list.");
+      const rankings = (args.rankings as Json[]).map((r) => ({
+        applicationId: need(r, "application_id"),
+        tier: need(r, "tier").toUpperCase() as Tier,
+        reason: need(r, "reason"),
+      }));
+      return applications.proposeTiers(ctx.userId, need(args, "job_id"), rankings);
+    },
+  },
+  {
+    name: "set_tier",
+    title: "Set a tier",
+    description:
+      "Decide an applicant's tier, ONLY when the person tells you to ('make Ana an A', 'accept your ranking for the top three'). This is their decision, not a proposal; to propose, use rank_applicants. " +
+      "Pass tier null to clear a decision, which leaves your proposal as the working tier.",
+    inputSchema: object(
+      {
+        application_id: str("The application's id."),
+        tier: { type: ["string", "null"], enum: [...TIER_VALUES, null], description: "A, B, C, or null to clear." },
+        reason: str("Their reason, in their words if they gave one."),
+      },
+      ["application_id", "tier"],
+    ),
+    annotations: SET,
+    handler: async (args, ctx) => {
+      const raw = args.tier;
+      const tier = raw === null ? null : (String(raw).toUpperCase() as Tier);
+      const a = await applications.setTier(ctx.userId, need(args, "application_id"), tier, s(args, "reason") ?? "", "mcp");
+      return { id: a.id, tier: a.tier, proposedTier: a.proposedTier };
     },
   },
   {
@@ -489,15 +562,16 @@ Do this in order, and stop to ask whenever you'd otherwise have to invent someth
   {
     name: "review_applicants",
     title: "Review new applicants",
-    description: "Read everyone waiting in NEW for a job and propose who to screen, with reasons.",
+    description: "Read everyone waiting in NEW for a job, propose a tier and rank for each, and suggest who to screen.",
     arguments: [{ name: "job", description: "The role's title or id.", required: true }],
     render: (a) => `Review the applicants waiting in NEW for "${a.job}".
 
 1. Find the job with list_jobs, then list_applications with stage NEW.
-2. get_application for each. Weigh what they said against the job's must-haves.
-3. Report in a table: name, met must-haves, the one thing that stands out, how the written answers arrived, and your suggestion (screen, hold, decline).
-4. Describe provenance as observation: "pasted", "typed", "likely written with AI". It's a reason to ask a follow-up question, never a reason on its own to decline.
-5. Don't move anyone until I say which suggestions to take.`,
+2. get_job for the rubric (if it has none, ask me what makes an A before ranking), then get_application for each.
+3. rank_applicants with every one of them, strongest first, each with a reason I can check.
+4. Report in a table: rank, name, proposed tier, met must-haves, the one thing that stands out, how the written answers arrived, and your suggestion (screen, hold, decline).
+5. Describe provenance as observation: "pasted", "typed", "likely written with AI". It's a reason to ask a follow-up question, never a reason on its own to rank someone lower.
+6. Don't move anyone or decide a tier until I say which suggestions to take.`,
   },
 ];
 

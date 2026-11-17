@@ -64,3 +64,28 @@ export function QualifiedChip({ qualified }: { qualified: boolean | null }) {
     <span className="text-xs text-rt-muted">Misses a must-have</span>
   );
 }
+
+/**
+ * A tier chip. Tier is data, so the colour carries meaning: A green, B the
+ * accent blue, C grey (brand/BRAND.md). A proposal the person hasn't decided
+ * on is drawn dashed and says so.
+ */
+export function TierChip({ tier, proposal = false, rank }: { tier: string | null; proposal?: boolean; rank?: number | null }) {
+  if (!tier) return <span className="text-xs text-rt-faint">Unranked</span>;
+  const color = tier === "A" ? "var(--rt-tier-a)" : tier === "B" ? "var(--rt-tier-b)" : "var(--rt-tier-c)";
+  return (
+    <span className="inline-flex items-center gap-1.5 text-xs" title={proposal ? "Proposed by Claude, not decided yet" : "Decided"}>
+      <span
+        className="inline-grid place-items-center w-5 h-5 rounded font-mono font-medium"
+        style={
+          proposal
+            ? { border: `1px dashed ${color}`, color }
+            : { background: `color-mix(in oklch, ${color} 18%, transparent)`, color, border: `1px solid ${color}` }
+        }
+      >
+        {tier}
+      </span>
+      {proposal && <span className="text-rt-faint">proposed{rank ? ` · #${rank}` : ""}</span>}
+    </span>
+  );
+}

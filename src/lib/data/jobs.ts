@@ -26,6 +26,7 @@ export type JobInput = {
   salaryCurrency?: string;
   salaryPeriod?: string;
   description?: string;
+  rubric?: string;
   status?: JobStatus;
 };
 
@@ -56,6 +57,7 @@ export async function createJob(userId: string, input: JobInput & { title: strin
       salaryCurrency: (input.salaryCurrency ?? "USD").toUpperCase(),
       salaryPeriod: input.salaryPeriod ?? "year",
       description: input.description ?? "",
+      rubric: input.rubric ?? "",
       status: input.status ?? "DRAFT",
     },
   });

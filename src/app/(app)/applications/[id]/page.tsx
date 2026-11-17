@@ -1,12 +1,12 @@
 import Link from "next/link";
 import { requireUser } from "@/lib/auth";
-import { getApplication, STAGES } from "@/lib/data/applications";
+import { getApplication, STAGES, TIERS } from "@/lib/data/applications";
 import { boardByKey } from "@/lib/boards";
 import type { StyleSignal } from "@/lib/provenance";
 import type { KnockoutResult } from "@/lib/forms";
-import { addNote, moveStage } from "@/server/actions";
+import { acceptProposal, addNote, moveStage, setTier } from "@/server/actions";
 import { ActionForm } from "@/components/forms";
-import { OriginBadge, ProvenanceBar, QualifiedChip, StyleBadge } from "@/components/provenance";
+import { OriginBadge, ProvenanceBar, QualifiedChip, StyleBadge, TierChip } from "@/components/provenance";
 
 function minutes(ms: number) {
   const m = Math.round(ms / 60000);
@@ -37,6 +37,7 @@ export default async function ApplicationPage({ params }: { params: Promise<{ id
           ))}
         </p>
         <div className="flex flex-wrap items-center gap-4">
+          <TierChip tier={a.effectiveTier} proposal={a.tierIsProposal} rank={a.proposal?.rank} />
           <QualifiedChip qualified={a.qualified} />
           <ProvenanceBar r={a.provenance} />
         </div>
@@ -54,6 +55,47 @@ export default async function ApplicationPage({ params }: { params: Promise<{ id
           ))}
         </div>
       </header>
+
+      <section className="card p-4 space-y-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <h2 className="font-semibold">Tier</h2>
+          <div className="flex gap-1">
+            {TIERS.map((t) => (
+              <form key={t} action={setTier.bind(null, a.id, t)}>
+                <button
+                  className={`font-mono text-xs w-8 h-7 rounded border ${a.tier === t ? "border-rt-primary bg-rt-primary-tint text-rt-primary" : "border-rt-border text-rt-muted hover:text-rt-foreground"}`}
+                  aria-pressed={a.tier === t}
+                >
+                  {t}
+                </button>
+              </form>
+            ))}
+            {a.tier && (
+              <form action={setTier.bind(null, a.id, null)}>
+                <button className="text-xs text-rt-muted hover:text-rt-foreground px-2 h-7">Clear</button>
+              </form>
+            )}
+          </div>
+          <span className="text-xs text-rt-faint">
+            {a.tier ? `Decided${a.tierBy === "mcp" ? " through Claude" : ""}.` : "Not decided yet."} A: worth a call this week. B: call if the A&apos;s run out. C: not this time.
+          </span>
+        </div>
+        {a.tierReason && <p className="text-rt-muted">{a.tierReason}</p>}
+        {a.proposal && (
+          <div className="flex flex-wrap items-start gap-3 rounded bg-rt-subtle p-3">
+            <TierChip tier={a.proposal.tier} proposal rank={a.proposal.rank} />
+            <p className="flex-1 min-w-[200px] text-rt-muted">
+              <span className="text-rt-foreground">Claude&apos;s proposal: </span>
+              {a.proposal.reason}
+            </p>
+            {a.tier !== a.proposal.tier && (
+              <form action={acceptProposal.bind(null, a.id)}>
+                <button className="btn text-xs">Accept {a.proposal.tier}</button>
+              </form>
+            )}
+          </div>
+        )}
+      </section>
 
       {a.submissions.length === 0 && <p className="text-rt-muted">No forms filled in yet.</p>}
 

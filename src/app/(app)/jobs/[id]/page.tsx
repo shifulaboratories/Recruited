@@ -7,7 +7,7 @@ import { boardByKey, renderListing, toHtml } from "@/lib/boards";
 import { readQuestions } from "@/lib/forms";
 import { setJobStatus, setListingStatus } from "@/server/actions";
 import { CopyButton } from "@/components/forms";
-import { ProvenanceBar, QualifiedChip, StageChip } from "@/components/provenance";
+import { ProvenanceBar, QualifiedChip, StageChip, TierChip } from "@/components/provenance";
 
 export default async function JobPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -15,7 +15,7 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
   const job = await getJob(user.id, id);
   const base = await baseUrl();
   const report = await listingReport(user.id, job.id);
-  const { applications } = await listApplications(user.id, { jobId: job.id });
+  const { applications } = await listApplications(user.id, { jobId: job.id, sort: "tier" });
   const byId = new Map(report.listings.map((r) => [r.listingId, r]));
 
   return (
@@ -60,8 +60,9 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
                     </span>
                     <span className="font-medium flex-1 min-w-[160px]">{l.title}</span>
                     <span className="text-xs text-rt-muted tabular">
-                      {r?.applicants ?? 0} applied · {r?.qualified ?? 0} qualified · {r?.reachedInterview ?? 0} interviewed
-                      {r?.costPerQualified != null && ` · ${report.currency} ${r.costPerQualified} per qualified`}
+                      {r?.applicants ?? 0} applied · {r?.qualified ?? 0} qualified ·{" "}
+                      <span style={{ color: "var(--rt-tier-a)" }}>{r?.tiers.A ?? 0} A-tier</span> · {r?.reachedInterview ?? 0} interviewed
+                      {r?.costPerATier != null && ` · ${report.currency} ${r.costPerATier} per A-tier`}
                     </span>
                     <StageChip stage={l.status} />
                   </div>
@@ -104,6 +105,9 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
             {applications.map((a) => (
               <li key={a.id}>
                 <Link href={`/applications/${a.id}`} className="flex flex-wrap items-center gap-x-6 gap-y-2 p-4 hover:bg-rt-subtle">
+                  <div className="w-28 shrink-0">
+                    <TierChip tier={a.effectiveTier} proposal={a.tierIsProposal} rank={a.proposal?.rank} />
+                  </div>
                   <div className="flex-1 min-w-[180px]">
                     <div className="font-medium">{a.candidate}</div>
                     <div className="text-xs text-rt-muted">{a.source}</div>
@@ -141,6 +145,13 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
           </div>
         )}
       </section>
+
+      {job.rubric && (
+        <section className="space-y-2">
+          <h2 className="font-semibold">What makes an A</h2>
+          <p className="card p-4 text-rt-muted whitespace-pre-wrap">{job.rubric}</p>
+        </section>
+      )}
 
       {job.description && (
         <section className="space-y-2">

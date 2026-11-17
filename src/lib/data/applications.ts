@@ -1,4 +1,4 @@
-import type { Origin, Prisma, Stage } from "@prisma/client";
+import type { Origin, Prisma, Stage, Tier } from "@prisma/client";
 import { db } from "@/lib/db";
 import { notFound, UserError } from "@/lib/data/errors";
 import { requireJob } from "@/lib/data/jobs";
@@ -11,6 +11,7 @@ import { styleLabel } from "@/lib/provenance";
  */
 
 export const STAGES: Stage[] = ["NEW", "SCREEN", "INTERVIEW", "OFFER", "HIRED", "REJECTED"];
+export const TIERS: Tier[] = ["A", "B", "C"];
 
 export function screeningPath(screenToken: string, formSlug: string) {
   return `/f/${formSlug}?t=${encodeURIComponent(screenToken)}`;
@@ -121,7 +122,7 @@ function rollup(answers: { origin: Origin; styleScore: number; value: string; te
 
 export async function listApplications(
   userId: string,
-  opts: { jobId?: string; stage?: Stage; listingId?: string; qualified?: boolean; limit?: number } = {},
+  opts: { jobId?: string; stage?: Stage; listingId?: string; qualified?: boolean; tier?: Tier; sort?: "newest" | "tier"; limit?: number } = {},
 ) {
   const where: Prisma.ApplicationWhereInput = {
     userId,
@@ -131,11 +132,21 @@ export async function listApplications(
     ...(opts.stage ? { stage: opts.stage } : {}),
     ...(opts.listingId ? { listingId: opts.listingId } : {}),
     ...(opts.qualified !== undefined ? { qualified: opts.qualified } : {}),
+    // A decided tier wins; a proposal counts only where nobody has decided.
+    ...(opts.tier ? { OR: [{ tier: opts.tier }, { tier: null, proposedTier: opts.tier }] } : {}),
   };
   const total = await db.application.count({ where });
   const rows = await db.application.findMany({
     where,
-    orderBy: { createdAt: "desc" },
+    orderBy:
+      opts.sort === "tier"
+        ? [
+            { tier: { sort: "asc", nulls: "last" } },
+            { proposedTier: { sort: "asc", nulls: "last" } },
+            { proposedRank: { sort: "asc", nulls: "last" } },
+            { createdAt: "desc" },
+          ]
+        : { createdAt: "desc" },
     take: Math.min(opts.limit ?? 100, 500),
     include: {
       candidate: { select: { name: true, email: true } },
@@ -154,6 +165,7 @@ export async function listApplications(
       email: a.candidate.email,
       stage: a.stage,
       qualified: a.qualified,
+      ...tierView(a),
       source: a.listing ? `${a.listing.board} ${a.listing.variant}` : a.source || "added by hand",
       appliedAt: a.createdAt,
       provenance: rollup(a.submissions.flatMap((s) => s.answers)),
@@ -185,6 +197,7 @@ export async function getApplication(userId: string, applicationId: string) {
     id: a.id,
     stage: a.stage,
     qualified: a.qualified,
+    ...tierView(a),
     appliedAt: a.createdAt,
     job: a.job,
     listing: a.listing,
@@ -211,4 +224,88 @@ export async function getApplication(userId: string, applicationId: string) {
     })),
     notes: a.notes.map((n) => ({ id: n.id, body: n.body, writtenBy: n.writtenBy, at: n.createdAt })),
   };
+}
+
+// ---------------------------------------------------------------------------
+// Tiers
+// ---------------------------------------------------------------------------
+
+type TierRow = {
+  tier: Tier | null;
+  tierReason: string;
+  tierBy: string;
+  proposedTier: Tier | null;
+  proposedReason: string;
+  proposedRank: number | null;
+};
+
+/**
+ * The tier as every caller sees it: the person's decision when there is one,
+ * the assistant's proposal beside it, and which of the two `effective` is.
+ */
+export function tierView(a: TierRow) {
+  return {
+    tier: a.tier,
+    tierReason: a.tierReason,
+    tierBy: a.tierBy || null,
+    proposal: a.proposedTier ? { tier: a.proposedTier, reason: a.proposedReason, rank: a.proposedRank } : null,
+    effectiveTier: a.tier ?? a.proposedTier,
+    tierIsProposal: !a.tier && !!a.proposedTier,
+  };
+}
+
+/**
+ * An assistant's ranking of a job's applicants, strongest first. Saves each
+ * one as a PROPOSAL: it never touches a tier a person decided. The order given
+ * is the rank; applicants of the job left out of this ranking lose their old
+ * rank (their proposed tier stays), so ranks always come from one pass.
+ */
+export async function proposeTiers(
+  userId: string,
+  jobId: string,
+  rankings: { applicationId: string; tier: Tier; reason: string }[],
+) {
+  const job = await requireJob(userId, jobId);
+  if (!rankings.length) throw new UserError("Rank at least one applicant.");
+  const ids = rankings.map((r) => r.applicationId);
+  if (new Set(ids).size !== ids.length) throw new UserError("Each applicant can appear once in a ranking.");
+  for (const r of rankings) {
+    if (!TIERS.includes(r.tier)) throw new UserError(`tier is A, B or C (got ${r.tier}).`);
+    if ((r.reason ?? "").trim().length < 15) throw new UserError(`Give a real reason for ${r.applicationId}: what in their application puts them in tier ${r.tier}.`);
+  }
+  const found = await db.application.findMany({ where: { userId, jobId: job.id, archivedAt: null, id: { in: ids } }, select: { id: true } });
+  const missing = ids.filter((id) => !found.some((f) => f.id === id));
+  if (missing.length) throw new UserError(`Not applicants of this job: ${missing.join(", ")}.`);
+  const now = new Date();
+  await db.$transaction([
+    db.application.updateMany({ where: { userId, jobId: job.id, id: { notIn: ids } }, data: { proposedRank: null } }),
+    ...rankings.map((r, i) =>
+      db.application.update({
+        where: { id: r.applicationId },
+        data: { proposedTier: r.tier, proposedReason: r.reason.trim(), proposedRank: i + 1, proposedAt: now },
+      }),
+    ),
+  ]);
+  const decided = await db.application.findMany({ where: { id: { in: ids }, tier: { not: null } }, select: { id: true, tier: true } });
+  return { ranked: rankings.length, alreadyDecided: decided.map((d) => ({ applicationId: d.id, tier: d.tier })) };
+}
+
+/**
+ * The person's decision. Pass null to clear it, which makes the proposal (if
+ * any) the effective tier again.
+ */
+export async function setTier(userId: string, applicationId: string, tier: Tier | null, reason: string, by: "app" | "mcp") {
+  const a = await requireApplication(userId, applicationId);
+  if (tier !== null && !TIERS.includes(tier)) throw new UserError("tier is A, B or C.");
+  return db.application.update({
+    where: { id: a.id },
+    data: tier === null ? { tier: null, tierReason: "", tierBy: "", tierAt: null } : { tier, tierReason: reason.trim(), tierBy: by, tierAt: new Date() },
+  });
+}
+
+/** Make the assistant's proposal the decision, as it stands. */
+export async function acceptProposal(userId: string, applicationId: string) {
+  const a = await requireApplication(userId, applicationId);
+  if (!a.proposedTier) throw new UserError("There's no proposal to accept.");
+  return setTier(userId, a.id, a.proposedTier, a.proposedReason, "app");
 }

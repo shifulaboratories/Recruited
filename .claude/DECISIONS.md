@@ -27,3 +27,19 @@ get no apply link and applicants are added with `add_applicant`.
 
 **Knockouts mark, never reject.** `Application.qualified` is false when a must-have was
 missed; the stage doesn't change.
+
+## 2026-11-17 — Tiers: the assistant proposes, the person decides
+
+William picked tiers and ranking as the next step. An application carries two tiers: the
+person's decision (`tier`, set in the app or by telling Claude, through `set_tier`) and the
+assistant's proposal (`proposedTier` with a reason and a rank, from `rank_applicants`). A
+ranking never overwrites a decision; it returns which applicants already have one so the
+assistant can say where it disagrees. Everywhere a single tier is needed, the decision wins
+and the proposal stands in until there is one; `tierIsProposal` and the dashed chip say so,
+and `listing_report` counts how many of its tier numbers are still proposals.
+
+A reason of at least 15 characters is required per applicant, because an unexplained tier
+is not something a person can check. Each ranking is one pass: applicants left out lose
+their old rank but keep their proposed tier. Jobs gained a free-text `rubric` ("what makes
+an A"), which `rank_applicants` follows and `review_applicants` asks for when it's empty.
+The tool description repeats the provenance rule: it never moves anyone down on its own.
