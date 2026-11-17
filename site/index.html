@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Recruited: hire from a conversation</title>
+<meta name="description" content="An open-source applicant tracking system for small teams hiring their first people. Post a role to every board, send screening forms, and see which answers were typed, pasted or likely written with AI. Runs from Claude over MCP.">
+<meta name="theme-color" content="#F9FAFB">
+<meta property="og:title" content="Recruited: hire from a conversation">
+<meta property="og:description" content="Post a role to every board, send screening forms, and see which answers were typed, pasted or likely written with AI.">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Recruited">
+<meta property="og:image" content="og.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600&family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="wrap nav">
+  <a class="brand" href="./" aria-label="recruited.tools">
+    <svg viewBox="0 0 64 64" width="26" height="26" aria-hidden="true"><rect width="64" height="64" rx="15" fill="currentColor"/><circle cx="32" cy="24" r="8" class="cut"/><rect x="16" y="37" width="32" height="7" rx="3.5" class="cut"/><rect x="22" y="47" width="20" height="5" rx="2.5" class="cut" opacity=".55"/></svg>
+    <span>recruited<span class="muted">.tools</span></span>
+  </a>
+  <nav>
+    <a href="#how">How it works</a>
+    <a href="#provenance">Provenance</a>
+    <a href="#faq">Questions</a>
+    <a class="btn" href="https://github.com/shifulaboratories/Recruited">GitHub</a>
+  </nav>
+</header>
+
+<main>
+  <section class="wrap hero">
+    <p class="eyebrow">Open-source ATS · runs on MCP</p>
+    <h1>Hire from a conversation.<br><span class="muted">Know who wrote the answers.</span></h1>
+    <p class="lede">Recruited is an applicant tracking system for small teams hiring their first people. Tell Claude what you're hiring for. It writes the job, the application form, and a listing in each board's own format, each with its own apply link. Applicants fill in the form, and every written answer records how it got there.</p>
+    <div class="ctas">
+      <a class="btn btn-primary" href="https://github.com/shifulaboratories/Recruited/blob/main/docs/DEPLOY.md">Run your own</a>
+      <a class="btn" href="https://github.com/shifulaboratories/Recruited">Read the code</a>
+    </div>
+
+    <figure class="card demo" aria-label="An example answer, with how it arrived">
+      <div class="demo-head">
+        <span class="chip tier-a">A</span>
+        <div>
+          <div class="strong">Operations virtual assistant</div>
+          <div class="faint mono small">via OnlineJobs.ph · listing B</div>
+        </div>
+        <span class="chip qual">met must-haves</span>
+      </div>
+      <p class="q">Tell us about a process you set up that someone else still uses.</p>
+      <p class="a"><span class="hl-typed">I set up the refund queue for a 12-person support team: one shared inbox, three labels, and a rule that nothing waits more than a day.</span> <span class="hl-pasted">The labels map to our three refund policies and each has a saved reply.</span></p>
+      <div class="bar" role="img" aria-label="74 percent typed, 26 percent pasted">
+        <span style="width:74%" class="b-typed"></span><span style="width:26%" class="b-pasted"></span>
+      </div>
+      <div class="legend small">
+        <span><i class="dot d-typed"></i>Typed 74%</span>
+        <span><i class="dot d-pasted"></i>Pasted 26%, after 40 seconds away from the page</span>
+        <span><i class="dot d-ai"></i>No signs of AI writing</span>
+      </div>
+      <figcaption class="faint small">An illustrative example, not real applicant data.</figcaption>
+    </figure>
+  </section>
+
+  <section class="wrap" id="how">
+    <p class="eyebrow">What it does</p>
+    <h2>Everything a first hire needs.<br><span class="muted">Nothing a talent team would.</span></h2>
+    <div class="grid">
+      <article class="card">
+        <h3>One role, every board</h3>
+        <p>Board guides for LinkedIn, Indeed, OnlineJobs.ph, Wellfound, Upwork and your own careers page: length limits, how pay is stated, what gets a listing rejected. Each listing gets its own apply link, so two versions on one board are an A/B test.</p>
+        <code>create_listing · listing_report</code>
+      </article>
+      <article class="card">
+        <h3>Forms that ask the right thing</h3>
+        <p>Must-have questions that mark who missed one, file questions for a setup photo or a speed test, and screening forms sent to each shortlisted applicant through a personal link.</p>
+        <code>set_application_form · get_screening_link</code>
+      </article>
+      <article class="card">
+        <h3>A ranking you can check</h3>
+        <p>Claude proposes an A, B or C tier for each applicant with a reason, following the rubric you wrote for the role. You decide. A tier you set is never overwritten.</p>
+        <code>rank_applicants · set_tier</code>
+      </article>
+      <article class="card">
+        <h3>Messages, interviews, offers</h3>
+        <p>Screening invites and rejections drafted for you and sent from your own email. Interview rounds with a scorecard per interviewer. Offers kept as versions, so a counter never erases what you offered.</p>
+        <code>prep_message · record_scorecard · record_offer</code>
+      </article>
+      <article class="card">
+        <h3>Bring the applicants you already have</h3>
+        <p>Paste an Indeed or LinkedIn applicant export and everyone lands in the job at once, counted against the listing they came through. It previews first and never adds anyone twice.</p>
+        <code>import_applicants</code>
+      </article>
+      <article class="card">
+        <h3>Or don't talk to it at all</h3>
+        <p>Every job, applicant, answer and file has a screen. Talking is faster for the busywork; the screen is where you look, adjust and decide. Both read the same data.</p>
+        <code>29 tools · 3 prompts</code>
+      </article>
+    </div>
+  </section>
+
+  <section class="wrap split" id="provenance">
+    <div>
+      <p class="eyebrow">Provenance</p>
+      <h2>What the form saw.<br><span class="muted">Not a verdict.</span></h2>
+    </div>
+    <div class="prose">
+      <p>The form counts characters by how they arrived, using the browser's own input events: typed, pasted, dropped, or filled in by something else, like autofill or an auto-typer. It notes a paste that comes right after the applicant left the page. It stores counts and timings, never keystrokes, and the form tells applicants what it records.</p>
+      <p>Writing style is a separate, weaker signal, and it always says <em>likely</em>. It misfires on second-language writers and people who use grammar tools, so it's a reason to ask a follow-up question, never a reason on its own to pass on someone.</p>
+      <p>Nothing in Recruited declines anyone automatically, and nothing calls an applicant a cheat.</p>
+    </div>
+  </section>
+
+  <section class="wrap" id="talk">
+    <p class="eyebrow">In practice</p>
+    <h2>There's nothing to learn.<br><span class="muted">You say what you'd say to a recruiter.</span></h2>
+    <div class="convo">
+      <p class="you">I'm hiring an operations VA, full time, PHP 30–40k a month. Post it on OnlineJobs.ph and LinkedIn.</p>
+      <p class="claude">Done: a job, a five-question application form with two must-haves, and a listing for each board in its own format. Here's what to paste and where. Tell me when they're live.</p>
+      <p class="you">Who's worth a call?</p>
+      <p class="claude">Three A's out of 41. Ana ran a support inbox for two years and her answers were typed. Two others pasted their longest answer after leaving the page; I'd ask them to walk through it on the call.</p>
+      <p class="faint small">An illustrative exchange.</p>
+    </div>
+  </section>
+
+  <section class="wrap split" id="own">
+    <div>
+      <p class="eyebrow">Yours</p>
+      <h2>Free, open source,<br><span class="muted">one variable to run.</span></h2>
+    </div>
+    <div class="prose">
+      <p>Recruited is AGPL-3.0. It needs Node and a Postgres database, and <code>DATABASE_URL</code> is the only setting: uploaded files live in the database too. Run it with Docker Compose in one command, or deploy it on Railway with a Postgres beside it.</p>
+      <p>Connect Claude by pasting your connection URL as a custom connector. Anything that speaks MCP works the same way.</p>
+      <p><a href="https://github.com/shifulaboratories/Recruited/blob/main/docs/DEPLOY.md">The deploy guide →</a></p>
+    </div>
+  </section>
+
+  <section class="wrap" id="faq">
+    <p class="eyebrow">Questions</p>
+    <h2>The ones that come up.</h2>
+    <details><summary>Does it post to job boards for me?</summary><p>No. None of these boards offers a posting API to a small employer without a partner agreement. Claude writes the listing in the board's format and checks it against the board's rules; you paste it and tell Claude when it's live.</p></details>
+    <details><summary>Does it send email from its own server?</summary><p>No. Messages are drafts until you send them from your own email, through your mail connector or the Open in email button, and then they're marked sent, so each applicant's page shows what they were told and when.</p></details>
+    <details><summary>Can it tell for certain that an answer was written with AI?</summary><p>No, and it never says it can. It reports what the form observed and labels style signals as likely. Treat both as a prompt for a question in the interview.</p></details>
+    <details><summary>Is it related to Hired?</summary><p>They're siblings. <a href="https://hired.tools">Hired</a> is an applicant tracking system for applicants; Recruited is the one for the people hiring. They share a look and a way of working, and they're separate products with no connection between them.</p></details>
+  </section>
+</main>
+
+<footer class="wrap foot">
+  <span>recruited<span class="muted">.tools</span> · by <a href="https://shifulab.com">Shifu Labs</a></span>
+  <span><a href="https://github.com/shifulaboratories/Recruited">GitHub</a> · AGPL-3.0</span>
+</footer>
+</body>
+</html>

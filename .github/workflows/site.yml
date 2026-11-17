@@ -1,0 +1,43 @@
+# Publishes the recruited.tools landing page to GitHub Pages, the way Hired's
+# site.yml does. tools/build-site.sh copies site/ and the brand files it uses
+# into _site/. configure-pages creates the Pages site on the first run, so
+# there's no setting to flip.
+name: Publish the landing page
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - site/**
+      - brand/tokens/**
+      - brand/logo/**
+      - tools/build-site.sh
+      - .github/workflows/site.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: sh tools/build-site.sh
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deployment
+        uses: actions/deploy-pages@v4
