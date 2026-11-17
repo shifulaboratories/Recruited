@@ -38,6 +38,7 @@ model User {
   submissions  Submission[]
   answers      Answer[]
   notes        Note[]
+  uploads      Upload[]
 }
 
 model Session {
@@ -295,8 +296,36 @@ model Answer {
 
   user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   submission Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  uploads    Upload[]
 
   @@index([userId, submissionId])
+}
+
+/// A file an applicant attached to a "file" question: a setup photo, a speed
+/// test, a portfolio PDF.
+///
+/// THE BYTES ARE IN THIS ROW, the call Hired's Attachment makes, because an
+/// object store would mean settings beyond DATABASE_URL. A bytea is only read
+/// when selected, so every read in src/lib/data/uploads.ts names its columns
+/// and only the one that serves the file names `data`.
+///
+/// It always belongs to one answer and cascades with it.
+model Upload {
+  id       String @id @default(cuid())
+  userId   String
+  answerId String
+  /// As it arrived, cleaned of path separators. What a download is called.
+  filename String
+  /// Sniffed from the file's first bytes, never trusted from the browser.
+  mimeType String
+  size     Int
+  data     Bytes
+  createdAt DateTime @default(now())
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  answer Answer @relation(fields: [answerId], references: [id], onDelete: Cascade)
+
+  @@index([userId, answerId])
 }
 
 model Note {

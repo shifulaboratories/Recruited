@@ -43,3 +43,19 @@ is not something a person can check. Each ranking is one pass: applicants left o
 their old rank but keep their proposed tier. Jobs gained a free-text `rubric` ("what makes
 an A"), which `rank_applicants` follows and `review_applicants` asks for when it's empty.
 The tool description repeats the provenance rule: it never moves anyone down on its own.
+
+## 2026-11-17 — File questions keep their bytes in Postgres
+
+OnlineJobs.ph screeners ask for a setup photo, a speed test and a typing test, and links to
+them were a poor substitute. A `file` question takes one image or PDF up to 10 MB (25 MB a
+submission). The bytes live in an `Upload` row under the answer, the call Hired's
+Attachment made, so `DATABASE_URL` stays the only setting; every read names its columns and
+only the download and `read_upload` select `data`. The type is sniffed from the first
+bytes and the browser's claim is ignored, so an HTML file renamed .png is refused. Files are
+served only to the signed-in owner, with nosniff and a sandbox CSP.
+
+`read_upload` returns MCP image content rather than a link, because the owner-only URL is
+useless to an assistant without a session, and seeing the screenshot is the point: Claude
+can check "87 Mbps" against a 25 Mbps must-have. HEIC goes back as a document since clients
+can't show it. Forms with files post multipart with the same JSON in a `payload` field;
+forms without files still post JSON.

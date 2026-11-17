@@ -18,6 +18,7 @@ export const QUESTION_TYPES = [
   "yes_no",
   "single_choice",
   "multi_choice",
+  "file",
 ] as const;
 export type QuestionType = (typeof QUESTION_TYPES)[number];
 
@@ -50,6 +51,8 @@ export const QuestionSchema = z
     knockout: KnockoutSchema.optional(),
     /** For long_text: a soft limit shown to the applicant. */
     maxWords: z.number().int().positive().optional(),
+    /** For file: what may be attached. One file per question, up to 10 MB. */
+    accept: z.enum(["image", "pdf", "image_or_pdf"]).default("image_or_pdf"),
   })
   .strict();
 
@@ -129,6 +132,8 @@ export function validateAnswer(q: FormQuestion, value: string): string | null {
       return v === "Yes" || v === "No" ? null : "Choose yes or no.";
     case "single_choice":
       return q.options.includes(v) ? null : "Choose one of the options.";
+    case "file":
+      return null;
     case "multi_choice":
       return v.split("\n").every((x) => q.options.includes(x)) ? null : "Choose from the options.";
     default:
