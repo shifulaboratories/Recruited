@@ -1,0 +1,62 @@
+# Recruited, self-hosted. One command:
+#
+#     docker compose up -d
+#
+# This starts the app and a Postgres it talks to over a private network,
+# applies migrations, creates your owner account and prints its password once.
+# Read it with:
+#
+#     docker compose logs app
+#
+# then sign in at http://localhost:3000 and change the email and password under
+# Connect Claude, Your account. Data, uploaded files included, lives in the
+# db-data volume across restarts and upgrades. To upgrade, pull the repo and run
+# `docker compose up -d --build`.
+#
+# Both variables below are optional; put them in a .env file next to this one:
+#
+#   POSTGRES_PASSWORD  The database password. The database isn't reachable from
+#                      outside this compose network; set one anyway on a shared host.
+#   PORT               The host port to listen on (the container stays on 3000).
+#
+# Applicants reach the apply and screening pages at whatever address you serve
+# this from, so put it behind HTTPS with a real domain before posting a listing.
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    ports:
+      - "${PORT:-3000}:3000"
+    environment:
+      DATABASE_URL: postgresql://recruited:${POSTGRES_PASSWORD:-recruited}@db:5432/recruited
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      # The image is slim and ships no curl; Node 20 has fetch.
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/login').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 5s
+      retries: 36
+      start_period: 15s
+    restart: unless-stopped
+
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: recruited
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-recruited}
+      POSTGRES_DB: recruited
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U recruited -d recruited"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+volumes:
+  db-data:

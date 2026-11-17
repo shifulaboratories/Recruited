@@ -16,10 +16,11 @@
 - Messages to applicants (17 Nov): `prep_message` and `save_message`, a `message_applicants` prompt, and a message log on the applicant page with Open in email, Mark sent and Delete draft. The server never sends mail. 24 tools, 3 prompts.
 - Importing from boards (17 Nov): `import_applicants` reads an Indeed, LinkedIn or spreadsheet CSV, matches columns by header, previews by default, attributes everyone to a listing, and keeps the other columns as a note. Also on the job page. 25 tools.
 - Interviews and offers (17 Nov): `schedule_interview`, `list_interviews`, `record_scorecard`, `record_offer`. Rounds per application, one scorecard per interviewer with a panel summary, offers as versions with what changed. `prep_message` now hands an interview invite the scheduled round and an offer email the latest version. 29 tools.
+- Deploy (17 Nov): `docker/Dockerfile` and `docker-compose.yml` for self-hosting, `railway.json` for Railway, and docs/DEPLOY.md. The image was built and run against an empty database: migrations applied, the owner was printed once, and MCP answered.
 
-## Next, in the order I'd take them
+## Next
 
-1. **Deploy.** Dockerfile and a Railway template, as in Hired.
+Everything on the first plan is built. What's worth doing next should come from using it on a real hire.
 
 ## What it deliberately doesn't do
 

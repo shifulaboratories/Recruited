@@ -11,7 +11,7 @@ export async function register() {
       console.log("\n  Recruited is ready. Sign in with:");
       console.log(`    email:    ${owner.email}`);
       console.log(`    password: ${owner.password}`);
-      console.log("  Change both in Settings. This password is not shown again.\n");
+      console.log("  Change both under Connect Claude, Your account. This password is not shown again.\n");
     }
   } catch (e) {
     console.error("Could not provision the owner account:", e);

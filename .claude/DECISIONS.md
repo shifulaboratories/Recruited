@@ -114,3 +114,16 @@ Times are stored in UTC. Tools take ISO 8601 with an offset; the page renders ti
 the viewer's browser and its picker submits an ISO string with the viewer's offset, because
 the server can't know the person's time zone. `prep_message` now returns the scheduled
 rounds and the latest offer, so an invite or an offer email states only what was recorded.
+
+## 2026-11-17 — Deploy the way Hired does: Nixpacks on Railway, Docker for everything else
+
+`railway.json` builds with Nixpacks and only runs `npm run build` (Hired found that running
+`npm ci` again there fails with EBUSY on the cache mount). The Dockerfile lives in
+`docker/`, not the root, because Railway prefers a root Dockerfile over the configured
+builder, and Hired's image never passed Railway's healthcheck. Unlike Hired's, the image
+ships no browser, since nothing here renders a PDF; it only adds openssl for Prisma.
+
+The base image is an `ARG` so a build can use a mirror when Docker Hub rate-limits, which
+happened while testing this. A one-click Railway template has to be published from a
+Railway account, so the repo carries the config and docs/DEPLOY.md the steps; publishing
+the template is William's to do.
