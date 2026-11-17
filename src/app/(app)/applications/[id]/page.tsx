@@ -5,8 +5,9 @@ import { boardByKey } from "@/lib/boards";
 import { filePath } from "@/lib/data/uploads";
 import type { StyleSignal } from "@/lib/provenance";
 import type { KnockoutResult } from "@/lib/forms";
-import { acceptProposal, addNote, moveStage, setTier } from "@/server/actions";
-import { ActionForm } from "@/components/forms";
+import { acceptProposal, addNote, deleteMessageDraft, markMessageSent, moveStage, saveMessageDraft, setTier } from "@/server/actions";
+import { ActionForm, CopyButton } from "@/components/forms";
+import { KIND_LABEL, MAILTO_SAFE_LENGTH, MESSAGE_KINDS, mailtoLink } from "@/lib/messages";
 import { OriginBadge, ProvenanceBar, QualifiedChip, StyleBadge, TierChip } from "@/components/provenance";
 
 function minutes(ms: number) {
@@ -177,6 +178,66 @@ export default async function ApplicationPage({ params }: { params: Promise<{ id
           </section>
         );
       })}
+
+      <section className="space-y-3">
+        <div className="flex flex-wrap items-baseline gap-x-3">
+          <h2 className="font-semibold">Messages</h2>
+          <span className="text-xs text-rt-faint">Recruited never sends email. Open a draft in your own email, send it there, then mark it sent.</span>
+        </div>
+        {a.messages.length === 0 && <p className="text-rt-muted">Nothing sent yet. Ask Claude to draft a screening invite, an interview invite or a rejection, or write one below.</p>}
+        {a.messages.map((m) => {
+          const mailto = mailtoLink(a.candidate.email, m.subject, m.body);
+          const draft = m.status === "DRAFT";
+          const day = (d: Date) => d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+          return (
+            <div key={m.id} className={`card p-4 space-y-2 ${draft ? "border-dashed" : ""}`}>
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                <span className="font-mono uppercase tracking-wide text-rt-muted">{KIND_LABEL[m.kind]}</span>
+                <span className={draft ? "text-rt-muted" : "text-rt-foreground"}>
+                  {draft ? `Draft${m.writtenBy === "mcp" ? " from Claude" : ""} · ${day(m.createdAt)}` : `Sent ${day(m.sentAt ?? m.createdAt)}`}
+                </span>
+              </div>
+              {m.subject && <div className="font-medium">{m.subject}</div>}
+              <div className="whitespace-pre-wrap text-rt-muted">{m.body}</div>
+              {draft && (
+                <div className="flex flex-wrap items-center gap-2 pt-1">
+                  {mailto.length <= MAILTO_SAFE_LENGTH ? (
+                    <a className="btn btn-primary text-xs" href={mailto}>
+                      Open in email
+                    </a>
+                  ) : (
+                    <>
+                      <CopyButton text={m.body} label="Copy message" />
+                      <span className="text-xs text-rt-faint">Too long to open in email directly; copy it into a new email to {a.candidate.email}.</span>
+                    </>
+                  )}
+                  <form action={markMessageSent.bind(null, m.id)}>
+                    <button className="btn text-xs">Mark sent</button>
+                  </form>
+                  <form action={deleteMessageDraft.bind(null, a.id, m.id)}>
+                    <button className="text-xs text-rt-muted hover:text-rt-foreground px-2">Delete draft</button>
+                  </form>
+                </div>
+              )}
+            </div>
+          );
+        })}
+        <details className="text-sm">
+          <summary className="cursor-pointer text-rt-muted hover:text-rt-foreground">Write a message yourself</summary>
+          <ActionForm action={saveMessageDraft} submit="Save draft" className="pt-3">
+            <input type="hidden" name="applicationId" value={a.id} />
+            <select name="kind" className="field" defaultValue="OTHER">
+              {MESSAGE_KINDS.map((k) => (
+                <option key={k} value={k}>
+                  {KIND_LABEL[k]}
+                </option>
+              ))}
+            </select>
+            <input className="field" name="subject" placeholder="Subject" />
+            <textarea className="field min-h-32" name="body" placeholder={`Hi ${a.candidate.name.split(/\s+/)[0]},`} />
+          </ActionForm>
+        </details>
+      </section>
 
       <section className="space-y-3">
         <h2 className="font-semibold">Notes</h2>

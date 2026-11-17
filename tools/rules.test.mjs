@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { classifyOrigin, readTelemetry, styleSignals, styleLabel, EMPTY_TELEMETRY } from "../src/lib/provenance.ts";
 import { renderListing, toPlain, toHtml, lintListing, boardByKey, BOARDS } from "../src/lib/boards.ts";
 import { QuestionsSchema, failedKnockouts, validateAnswer, readQuestions } from "../src/lib/forms.ts";
+import { mailtoLink, KIND_GUIDANCE, MESSAGE_KINDS } from "../src/lib/messages.ts";
 
 const t = (o) => ({ ...EMPTY_TELEMETRY, ...o });
 
@@ -120,4 +121,17 @@ test("files: the type comes from the bytes, not the name", () => {
   const q = QuestionsSchema.parse([{ id: "setup_photo", label: "Your work setup", type: "file", accept: "image", required: true }]);
   assert.equal(q[0].accept, "image");
   assert.equal(QuestionsSchema.parse([{ id: "cv", label: "CV", type: "file" }])[0].accept, "image_or_pdf");
+});
+
+test("messages: mailto keeps the address readable and encodes the rest", () => {
+  const m = mailtoLink("ana+jobs@example.com", "Next step & a form", "Hi Ana,\n\nLink: https://x.test/f/a?t=1&b=2");
+  assert.ok(m.startsWith("mailto:ana%2Bjobs@example.com?subject=Next%20step%20%26%20a%20form&body="));
+  assert.ok(m.includes("%0A%0ALink%3A%20https%3A%2F%2Fx.test%2Ff%2Fa%3Ft%3D1%26b%3D2"));
+  assert.equal(mailtoLink("a@b.c", "", ""), "mailto:a@b.c");
+});
+
+test("messages: every kind has guidance, and a rejection never cites provenance", () => {
+  for (const k of MESSAGE_KINDS) assert.ok(KIND_GUIDANCE[k].length > 0, k);
+  assert.ok(KIND_GUIDANCE.REJECTION.some((g) => /provenance is not a reason/.test(g)));
+  assert.ok(KIND_GUIDANCE.OFFER.some((g) => /Never fill a gap/.test(g)));
 });

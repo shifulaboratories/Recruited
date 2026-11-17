@@ -59,3 +59,21 @@ useless to an assistant without a session, and seeing the screenshot is the poin
 can check "87 Mbps" against a 25 Mbps must-have. HEIC goes back as a document since clients
 can't show it. Forms with files post multipart with the same JSON in a `payload` field;
 forms without files still post JSON.
+
+## 2026-11-17 — Messages are drafts and a record; the server never sends mail
+
+Sending from Recruited would mean SMTP settings (breaking the one-variable rule) and mail
+arriving from an address the applicant doesn't know. Instead a `Message` is a draft until
+the person sends it from their own email, through their assistant's mail connector or the
+app's Open in email (a mailto link; past 1,800 characters the app offers Copy, since mail
+clients cut long mailto links), and is then marked SENT. A sent message can't be edited,
+deleted or turned back into a draft, so the applicant's page is a true log of what they
+were told and when.
+
+Two tools rather than four: `prep_message` gathers what a message needs (the applicant's
+personal screening links, whether each form is already filled in and which files it asks
+for, what they were sent before) plus per-kind guidance from `src/lib/messages.ts`, and
+`save_message` adds a draft or, with `message_id`, edits one or marks it sent. The guidance
+carries the rules that matter most: never invent a time, pay figure or reason, and never
+mention how an applicant's answers were typed or pasted in anything sent to them. The
+server instructions add that nothing goes to an applicant without the person's approval.
