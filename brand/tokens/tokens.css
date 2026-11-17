@@ -1,0 +1,157 @@
+/* recruited.tools design tokens, v1 (2026-11-17)
+   Every colour is written twice: hex for anything that cannot read OKLCH, then
+   OKLCH, which wins wherever it is understood. Light is the default; dark applies
+   with prefers-color-scheme unless the page pins data-theme="light", and always
+   under data-theme="dark". Prefix rt- so these never collide with shadcn names;
+   map them onto --primary etc. in the app's own globals.css. */
+:root {
+  /* Surfaces and ink */
+  --rt-background: #F9FAFB;
+  --rt-background: oklch(0.985 0.002 265);
+  --rt-surface: #FFFFFF;
+  --rt-surface: oklch(1 0 0);
+  --rt-subtle: #F2F2F4;
+  --rt-subtle: oklch(0.962 0.002 265);
+  --rt-border: #DEE0E2;
+  --rt-border: oklch(0.905 0.003 265);
+  --rt-foreground: #17181C;
+  --rt-foreground: oklch(0.21 0.007 265);
+  --rt-muted: #626569;
+  --rt-muted: oklch(0.505 0.008 265);
+  --rt-faint: #707277;
+  --rt-faint: oklch(0.553 0.008 265);
+  /* The one accent: links, primary buttons, selection, focus */
+  --rt-primary: #0075BA;
+  --rt-primary: oklch(0.535 0.15 240);
+  --rt-primary-tint: #E4F3FE;
+  --rt-primary-tint: oklch(0.955 0.022 240);
+  /* Candidate tier. Data only, never decoration */
+  --rt-tier-a: #168B49;
+  --rt-tier-a: oklch(0.56 0.14 152);
+  --rt-tier-b: #0075BA;
+  --rt-tier-b: oklch(0.535 0.15 240);
+  --rt-tier-c: #A1A5AB;
+  --rt-tier-c: oklch(0.72 0.01 265);
+  /* Answer provenance: how a screening answer reached the form */
+  --rt-typed: #17181C;
+  --rt-typed: oklch(0.21 0.007 265);
+  --rt-pasted: #BA6900;
+  --rt-pasted: oklch(0.6 0.14 62);
+  --rt-ai: #7C54CD;
+  --rt-ai: oklch(0.55 0.18 295);
+  /* Status */
+  --rt-destructive: #DB2B33;
+  --rt-destructive: oklch(0.58 0.21 25);
+  --rt-success: #168B49;
+  --rt-success: oklch(0.56 0.14 152);
+  --rt-warning: #DC932E;
+  --rt-warning: oklch(0.72 0.14 70);
+  /* Type, radius */
+  --rt-font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --rt-font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --rt-text-xs: 12px;
+  --rt-text-sm: 13px;
+  --rt-text-base: 14px;
+  --rt-text-md: 16px;
+  --rt-text-lg: 20px;
+  --rt-text-xl: 28px;
+  --rt-text-2xl: 40px;
+  --rt-text-display: 64px;
+  --rt-tracking-display: -0.035em;
+  --rt-tracking-heading: -0.02em;
+  --rt-tracking-eyebrow: 0.06em;
+  --rt-radius-sm: 6px;
+  --rt-radius: 10px;
+  --rt-radius-lg: 16px;
+  --rt-radius-mark: 23.4%;
+}
+
+@media (prefers-color-scheme: dark) {
+ :root:not([data-theme="light"]) {
+    /* Surfaces and ink */
+    --rt-background: #0E0F12;
+    --rt-background: oklch(0.17 0.006 265);
+    --rt-surface: #18191D;
+    --rt-surface: oklch(0.215 0.007 265);
+    --rt-subtle: #202225;
+    --rt-subtle: oklch(0.25 0.007 265);
+    --rt-border: #2C2E31;
+    --rt-border: oklch(0.3 0.007 265);
+    --rt-foreground: #F3F3F5;
+    --rt-foreground: oklch(0.965 0.002 265);
+    --rt-muted: #96989D;
+    --rt-muted: oklch(0.68 0.008 265);
+    --rt-faint: #7E8085;
+    --rt-faint: oklch(0.6 0.008 265);
+    /* The one accent: links, primary buttons, selection, focus */
+    --rt-primary: #3CA9E5;
+    --rt-primary: oklch(0.7 0.13 237);
+    --rt-primary-tint: #3CA9E52B;
+    --rt-primary-tint: oklch(0.7 0.13 237 / 0.17);
+    /* Candidate tier. Data only, never decoration */
+    --rt-tier-a: #4DBF74;
+    --rt-tier-a: oklch(0.72 0.15 152);
+    --rt-tier-b: #3CA9E5;
+    --rt-tier-b: oklch(0.7 0.13 237);
+    --rt-tier-c: #606369;
+    --rt-tier-c: oklch(0.5 0.01 265);
+    /* Answer provenance: how a screening answer reached the form */
+    --rt-typed: #F3F3F5;
+    --rt-typed: oklch(0.965 0.002 265);
+    --rt-pasted: #ECA851;
+    --rt-pasted: oklch(0.78 0.13 70);
+    --rt-ai: #A689F1;
+    --rt-ai: oklch(0.7 0.15 295);
+    /* Status */
+    --rt-destructive: #F05653;
+    --rt-destructive: oklch(0.66 0.19 25);
+    --rt-success: #4DBF74;
+    --rt-success: oklch(0.72 0.15 152);
+    --rt-warning: #F2AF48;
+    --rt-warning: oklch(0.8 0.14 75);
+  }
+}
+
+:root[data-theme="dark"] {
+  /* Surfaces and ink */
+  --rt-background: #0E0F12;
+  --rt-background: oklch(0.17 0.006 265);
+  --rt-surface: #18191D;
+  --rt-surface: oklch(0.215 0.007 265);
+  --rt-subtle: #202225;
+  --rt-subtle: oklch(0.25 0.007 265);
+  --rt-border: #2C2E31;
+  --rt-border: oklch(0.3 0.007 265);
+  --rt-foreground: #F3F3F5;
+  --rt-foreground: oklch(0.965 0.002 265);
+  --rt-muted: #96989D;
+  --rt-muted: oklch(0.68 0.008 265);
+  --rt-faint: #7E8085;
+  --rt-faint: oklch(0.6 0.008 265);
+  /* The one accent: links, primary buttons, selection, focus */
+  --rt-primary: #3CA9E5;
+  --rt-primary: oklch(0.7 0.13 237);
+  --rt-primary-tint: #3CA9E52B;
+  --rt-primary-tint: oklch(0.7 0.13 237 / 0.17);
+  /* Candidate tier. Data only, never decoration */
+  --rt-tier-a: #4DBF74;
+  --rt-tier-a: oklch(0.72 0.15 152);
+  --rt-tier-b: #3CA9E5;
+  --rt-tier-b: oklch(0.7 0.13 237);
+  --rt-tier-c: #606369;
+  --rt-tier-c: oklch(0.5 0.01 265);
+  /* Answer provenance: how a screening answer reached the form */
+  --rt-typed: #F3F3F5;
+  --rt-typed: oklch(0.965 0.002 265);
+  --rt-pasted: #ECA851;
+  --rt-pasted: oklch(0.78 0.13 70);
+  --rt-ai: #A689F1;
+  --rt-ai: oklch(0.7 0.15 295);
+  /* Status */
+  --rt-destructive: #F05653;
+  --rt-destructive: oklch(0.66 0.19 25);
+  --rt-success: #4DBF74;
+  --rt-success: oklch(0.72 0.15 152);
+  --rt-warning: #F2AF48;
+  --rt-warning: oklch(0.8 0.14 75);
+}
