@@ -24,7 +24,8 @@ export const KIND_GUIDANCE: Record<MessageKindName, string[]> = {
   ],
   INTERVIEW_INVITE: [
     "Name the role, the format (video, phone, in person), the length and who they'll meet.",
-    "Offer times or a booking link only if the person gave them; never invent a time.",
+    "Use the scheduled interview from prep_message for the time, format, length, link and who they'll meet. Offer times or a booking link only if the person gave them; never invent a time.",
+    "Give the time with its time zone, and the applicant's own if you know it.",
     "Say what, if anything, to prepare.",
   ],
   REJECTION: [
@@ -34,7 +35,7 @@ export const KIND_GUIDANCE: Record<MessageKindName, string[]> = {
     "No invented promises such as 'we'll keep you on file' unless the person said so.",
   ],
   OFFER: [
-    "Only the terms the person gave you: title, pay, start date, hours. Never fill a gap with a plausible number.",
+    "Only the terms in the recorded offer (prep_message returns the latest version) or that the person gave you: title, pay, start date, hours. Never fill a gap with a plausible number.",
     "Say what happens next and by when you need an answer, if the person said.",
   ],
   OTHER: ["Plain, direct, second person. Say why you're writing in the first sentence."],

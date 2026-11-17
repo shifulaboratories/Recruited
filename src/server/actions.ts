@@ -10,6 +10,7 @@ import * as applications from "@/lib/data/applications";
 import * as connections from "@/lib/data/connections";
 import * as messages from "@/lib/data/messages";
 import * as imports from "@/lib/data/imports";
+import * as interviews from "@/lib/data/interviews";
 import { updateAccount, userByLogin } from "@/lib/data/users";
 import { UserError } from "@/lib/data/errors";
 
@@ -170,4 +171,82 @@ export async function importApplicantsAction(input: {
     if (e instanceof UserError) return { error: e.message };
     throw e;
   }
+}
+
+const field = (form: FormData, k: string) => {
+  const v = form.get(k);
+  return typeof v === "string" && v.trim() !== "" ? v : undefined;
+};
+
+export async function addInterviewAction(_: ActionState, form: FormData): Promise<ActionState> {
+  const user = await requireUser();
+  const id = String(form.get("applicationId") ?? "");
+  const r = await attempt(
+    () =>
+      interviews
+        .addInterview(user.id, id, {
+          title: field(form, "title"),
+          format: field(form, "format"),
+          scheduledAt: field(form, "scheduledAt"),
+          durationMin: field(form, "durationMin") ? Number(field(form, "durationMin")) : undefined,
+          interviewers: field(form, "interviewers"),
+          location: field(form, "location"),
+        })
+        .then(() => {}),
+  );
+  revalidatePath(`/applications/${id}`);
+  return r;
+}
+
+export async function setInterviewStatus(applicationId: string, interviewId: string, status: string) {
+  const user = await requireUser();
+  await interviews.updateInterview(user.id, interviewId, { status });
+  revalidatePath(`/applications/${applicationId}`);
+}
+
+export async function addScorecardAction(_: ActionState, form: FormData): Promise<ActionState> {
+  const user = await requireUser();
+  const appId = String(form.get("applicationId") ?? "");
+  const r = await attempt(
+    () =>
+      interviews
+        .addScorecard(user.id, String(form.get("interviewId") ?? ""), {
+          interviewer: String(form.get("interviewer") ?? ""),
+          recommendation: String(form.get("recommendation") ?? ""),
+          summary: field(form, "summary"),
+          writtenBy: "app",
+        })
+        .then(() => {}),
+  );
+  revalidatePath(`/applications/${appId}`);
+  return r;
+}
+
+export async function recordOfferAction(_: ActionState, form: FormData): Promise<ActionState> {
+  const user = await requireUser();
+  const id = String(form.get("applicationId") ?? "");
+  const r = await attempt(
+    () =>
+      interviews
+        .recordOffer(user.id, id, {
+          title: field(form, "title"),
+          payAmount: field(form, "payAmount") ? Number(String(field(form, "payAmount")).replace(/[^0-9]/g, "")) : undefined,
+          payCurrency: field(form, "payCurrency"),
+          payPeriod: field(form, "payPeriod"),
+          startDate: field(form, "startDate"),
+          hours: field(form, "hours"),
+          terms: field(form, "terms"),
+          respondBy: field(form, "respondBy"),
+        })
+        .then(() => {}),
+    "Saved as a new version.",
+  );
+  revalidatePath(`/applications/${id}`);
+  return r;
+}
+
+export async function setOfferStatusAction(applicationId: string, offerId: string, status: string) {
+  const user = await requireUser();
+  await interviews.setOfferStatus(user.id, offerId, status);
+  revalidatePath(`/applications/${applicationId}`);
 }

@@ -6,11 +6,13 @@ import * as applications from "@/lib/data/applications";
 import * as uploads from "@/lib/data/uploads";
 import * as messages from "@/lib/data/messages";
 import * as imports from "@/lib/data/imports";
+import * as interviews from "@/lib/data/interviews";
 import { UserError } from "@/lib/data/errors";
 import { BOARDS, BOARD_KEYS, boardByKey } from "@/lib/boards";
 import { QUESTION_TYPES } from "@/lib/forms";
 import { MESSAGE_KINDS } from "@/lib/messages";
 import { IMPORT_FIELDS, type ImportField } from "@/lib/csv";
+import { INTERVIEW_FORMATS, OFFER_STATUSES, PAY_PERIODS, RECOMMENDATIONS } from "@/lib/scorecards";
 
 /**
  * Every tool and prompt, in one array each. The description IS the interface:
@@ -411,12 +413,13 @@ export const TOOLS: McpTool[] = [
       "Each written answer has origin (TYPED, PASTED, MIXED, INJECTED for autofill or auto-typers, UNKNOWN), a one-line summary of what the page observed, and style signals with a label. " +
       "Read origin as observation and style as a weak hint: pasting from your own notes is pasting, and second-language writers trip style signals. Never call someone a cheat or reject them on provenance alone; " +
       "say what was observed ('pasted after 40 seconds away from the page', 'likely written with AI') and weigh it against what they said. " +
-      "Answers to file questions list their files; read_upload opens one.",
+      "Answers to file questions list their files; read_upload opens one. Also returns interviews with their scorecards, where the panel stands, and every offer version.",
     inputSchema: object({ application_id: str("The application's id.") }, ["application_id"]),
     annotations: READ,
     handler: async (args, ctx) => {
-      const { screenToken: _t, ...rest } = await applications.getApplication(ctx.userId, need(args, "application_id"));
-      return rest;
+      const id = need(args, "application_id");
+      const { screenToken: _t, ...rest } = await applications.getApplication(ctx.userId, id);
+      return { ...rest, ...(await interviews.interviewsAndOffers(ctx.userId, id)) };
     },
   },
   {
@@ -566,6 +569,132 @@ export const TOOLS: McpTool[] = [
         dryRun: args.dry_run !== false,
         writtenBy: "mcp",
       });
+    },
+  },
+  {
+    name: "schedule_interview",
+    title: "Schedule or update an interview",
+    description:
+      "Record an interview with an applicant: the screening call, the work sample review, the final. With application_id it adds the next round; with interview_id it changes only the fields you send, including status (DONE, CANCELLED, NO_SHOW). " +
+      "This keeps the record; it doesn't send an invite or touch a calendar. To invite them, prep_message with kind INTERVIEW_INVITE, which reads what you saved here. If you have the person's calendar connector, create the event there too, only when they ask. " +
+      "Never invent a time or an interviewer: ask. Give scheduled_at in ISO 8601 with the time zone offset the person means. It doesn't move the applicant's stage; use move_stage if the person wants them in INTERVIEW.",
+    inputSchema: object({
+      application_id: str("The application, to add a new round."),
+      interview_id: str("An interview's id, to change it."),
+      title: str("What the conversation is: 'screening call', 'work sample review', 'final with the founder'. Required when adding."),
+      format: oneOf(INTERVIEW_FORMATS, "video, phone or in_person."),
+      scheduled_at: str("When, ISO 8601 with offset, e.g. 2026-11-20T14:00:00+08:00. Empty string clears it."),
+      duration_min: num("Length in minutes."),
+      interviewers: str("Who they'll meet, as the person said it."),
+      location: str("A meeting link or an address."),
+      status: oneOf(["SCHEDULED", "DONE", "CANCELLED", "NO_SHOW"], "Only when changing an interview."),
+    }),
+    annotations: ADD,
+    handler: async (args, ctx) => {
+      const input = {
+        title: s(args, "title"),
+        format: s(args, "format"),
+        scheduledAt: typeof args.scheduled_at === "string" ? args.scheduled_at : undefined,
+        durationMin: n(args, "duration_min"),
+        interviewers: s(args, "interviewers"),
+        location: s(args, "location"),
+        status: s(args, "status"),
+      };
+      const id = s(args, "interview_id");
+      const i = id ? await interviews.updateInterview(ctx.userId, id, input) : await interviews.addInterview(ctx.userId, need(args, "application_id"), input);
+      const { userId: _u, ...rest } = i;
+      return rest;
+    },
+  },
+  {
+    name: "list_interviews",
+    title: "List interviews",
+    description:
+      "Interviews across every open job, earliest first, with the applicant, the job, and how many scorecards say yes or no. Reach for it for 'what's on this week', 'who still needs a scorecard' (status DONE with no scorecards), or one job's interview loop. " +
+      "Times are stored in UTC; say them in the person's time zone.",
+    inputSchema: object({
+      from: str("Start of the window, ISO 8601. Leave out for no start."),
+      to: str("End of the window, ISO 8601."),
+      job_id: str("Only this job."),
+      status: oneOf(["SCHEDULED", "DONE", "CANCELLED", "NO_SHOW"], "Only this status."),
+    }),
+    annotations: READ,
+    handler: (args, ctx) =>
+      interviews.listInterviews(ctx.userId, { from: s(args, "from"), to: s(args, "to"), jobId: s(args, "job_id"), status: s(args, "status") }),
+  },
+  {
+    name: "record_scorecard",
+    title: "Record a scorecard",
+    description:
+      "Save one interviewer's verdict on one interview: a recommendation (STRONG_YES, YES, NO, STRONG_NO), optional ratings per criterion from 1 (well below the bar) to 4 (above it), and a summary. " +
+      "Write it from what the interviewer told you, in their words, and attribute it to them; never fill in a rating they didn't give. Use the job's rubric (get_job) for the criteria when they rate against it. " +
+      "Adds; several interviewers each get their own scorecard. Marks a SCHEDULED interview DONE. It decides nothing: the person still decides the tier and the stage.",
+    inputSchema: object(
+      {
+        interview_id: str("The interview's id, from get_application or list_interviews."),
+        interviewer: str("Whose verdict this is."),
+        recommendation: oneOf(RECOMMENDATIONS, "Their overall call."),
+        ratings: {
+          type: "array",
+          description: "Optional. One entry per criterion they rated.",
+          items: object({ criterion: str("What was rated."), score: num("1 well below, 2 below, 3 meets, 4 above the bar."), note: str("Why, in their words.") }, ["criterion", "score"]),
+        },
+        summary: str("What they said, briefly: evidence, not adjectives."),
+      },
+      ["interview_id", "interviewer", "recommendation"],
+    ),
+    annotations: ADD,
+    handler: async (args, ctx) => {
+      const c = await interviews.addScorecard(ctx.userId, need(args, "interview_id"), {
+        interviewer: need(args, "interviewer"),
+        recommendation: need(args, "recommendation"),
+        ratings: args.ratings,
+        summary: s(args, "summary"),
+        writtenBy: "mcp",
+      });
+      return { id: c.id, interviewId: c.interviewId, recommendation: c.recommendation };
+    },
+  },
+  {
+    name: "record_offer",
+    title: "Record an offer",
+    description:
+      "Write down an offer to an applicant. With application_id it saves a NEW VERSION: terms you leave out carry over from the version before (the first takes currency and period from the job), so a counter at a higher figure is just pay_amount. Every version is kept, which is the history of the negotiation. " +
+      "With offer_id and status it changes only that version's status: EXTENDED once it has gone to them, then ACCEPTED, DECLINED or WITHDRAWN. " +
+      "Only the terms the person gave you; never fill a gap with a plausible number. Returns pay formatted and which terms changed from the last version. " +
+      "It sends nothing: to write the offer email, prep_message with kind OFFER, which reads the latest version. It doesn't move the stage.",
+    inputSchema: object({
+      application_id: str("The application, to save a new version."),
+      offer_id: str("An offer version's id, to change only its status."),
+      title: str("The job title on the offer. Defaults to the job's."),
+      pay_amount: num("Whole number in the currency, e.g. 40000."),
+      pay_currency: str("ISO code, e.g. PHP, USD."),
+      pay_period: oneOf(PAY_PERIODS, "hour, month or year."),
+      start_date: str("ISO date, e.g. 2026-12-01."),
+      hours: str("Hours and schedule as the person said them."),
+      terms: str("Anything else agreed, markdown: probation, equipment, leave."),
+      respond_by: str("ISO date they're asked to answer by."),
+      status: oneOf(OFFER_STATUSES, "DRAFT (default for a new version), EXTENDED, ACCEPTED, DECLINED, WITHDRAWN."),
+    }),
+    annotations: ADD,
+    handler: async (args, ctx) => {
+      const offerId = s(args, "offer_id");
+      if (offerId) {
+        const o = await interviews.setOfferStatus(ctx.userId, offerId, need(args, "status"));
+        return { id: o.id, version: o.version, status: o.status };
+      }
+      const { userId: _u, ...o } = await interviews.recordOffer(ctx.userId, need(args, "application_id"), {
+        title: s(args, "title"),
+        payAmount: n(args, "pay_amount"),
+        payCurrency: s(args, "pay_currency"),
+        payPeriod: s(args, "pay_period"),
+        startDate: s(args, "start_date"),
+        hours: s(args, "hours"),
+        terms: s(args, "terms"),
+        respondBy: s(args, "respond_by"),
+        status: s(args, "status"),
+      });
+      return o;
     },
   },
   {

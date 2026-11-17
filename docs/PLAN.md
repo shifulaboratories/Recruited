@@ -15,12 +15,11 @@
 - File questions (17 Nov): one image or PDF per question, up to 10 MB, typed by its bytes and stored in Postgres; shown on the applicant page and opened by Claude with `read_upload`. 22 tools.
 - Messages to applicants (17 Nov): `prep_message` and `save_message`, a `message_applicants` prompt, and a message log on the applicant page with Open in email, Mark sent and Delete draft. The server never sends mail. 24 tools, 3 prompts.
 - Importing from boards (17 Nov): `import_applicants` reads an Indeed, LinkedIn or spreadsheet CSV, matches columns by header, previews by default, attributes everyone to a listing, and keeps the other columns as a note. Also on the job page. 25 tools.
+- Interviews and offers (17 Nov): `schedule_interview`, `list_interviews`, `record_scorecard`, `record_offer`. Rounds per application, one scorecard per interviewer with a panel summary, offers as versions with what changed. `prep_message` now hands an interview invite the scheduled round and an offer email the latest version. 29 tools.
 
 ## Next, in the order I'd take them
 
-1. **Interviews and offers.** Rounds, scorecards and offer versions, the hiring-side
-   mirror of what Hired has.
-2. **Deploy.** Dockerfile and a Railway template, as in Hired.
+1. **Deploy.** Dockerfile and a Railway template, as in Hired.
 
 ## What it deliberately doesn't do
 

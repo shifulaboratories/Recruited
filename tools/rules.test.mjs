@@ -6,6 +6,7 @@ import { renderListing, toPlain, toHtml, lintListing, boardByKey, BOARDS } from 
 import { QuestionsSchema, failedKnockouts, validateAnswer, readQuestions } from "../src/lib/forms.ts";
 import { mailtoLink, KIND_GUIDANCE, MESSAGE_KINDS } from "../src/lib/messages.ts";
 import { parseCsv, mapColumns, guessBoard, rowsToApplicants } from "../src/lib/csv.ts";
+import { panelView, offerChanges, readRatings, formatOfferPay } from "../src/lib/scorecards.ts";
 
 const t = (o) => ({ ...EMPTY_TELEMETRY, ...o });
 
@@ -162,4 +163,20 @@ test("csv: a named column beats the guess", () => {
   const map = mapColumns(["Candidate", "Contact", "Email"], { email: "contact" });
   assert.deepEqual(map.email, ["Contact"]);
   assert.deepEqual(map.name, ["Candidate"]);
+});
+
+test("scorecards: the panel view counts yes and no and flags a strong no", () => {
+  const p = panelView([{ recommendation: "STRONG_YES" }, { recommendation: "YES" }, { recommendation: "STRONG_NO" }]);
+  assert.deepEqual(p, { scorecards: 3, yes: 2, no: 1, strongNo: true, split: true });
+  assert.equal(panelView([]).split, false);
+  assert.deepEqual(readRatings([{ criterion: "Writing", score: 5 }]), []);
+  assert.equal(readRatings([{ criterion: "Writing", score: 3 }])[0].note, "");
+});
+
+test("offers: changes between versions, and pay formatting", () => {
+  const v1 = { payAmount: 35000, payCurrency: "PHP", payPeriod: "month", startDate: new Date("2026-12-01"), hours: "40", title: "Ops VA", terms: "", respondBy: null };
+  assert.deepEqual(offerChanges(null, v1), []);
+  assert.deepEqual(offerChanges(v1, { ...v1, payAmount: 40000, startDate: new Date("2026-12-01T00:00:00Z") }), ["payAmount"]);
+  assert.equal(formatOfferPay(v1), "PHP 35,000 per month");
+  assert.equal(formatOfferPay({ ...v1, payAmount: null }), "");
 });
