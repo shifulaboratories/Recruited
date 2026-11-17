@@ -18,14 +18,14 @@
 
 ## Next, in the order I'd take them
 
-1. **Apply with Hired.** An applicant pastes their published Hired resume link
-   (`/r/<slug>/resume.json`, already built on the Hired side) and the form fills itself.
-2. **Interviews and offers.** Rounds, scorecards and offer versions, the hiring-side
+1. **Interviews and offers.** Rounds, scorecards and offer versions, the hiring-side
    mirror of what Hired has.
-3. **Deploy.** Dockerfile and a Railway template, as in Hired.
+2. **Deploy.** Dockerfile and a Railway template, as in Hired.
 
 ## What it deliberately doesn't do
 
+- Depend on Hired. Recruited is a separate product with no integration to Hired; it only
+  borrows Hired's conventions (William, 17 Nov).
 - Post to boards automatically. None of these boards offers a posting API to a small
   employer that doesn't need a partner agreement; the listing is pasted by a person and
   marked live by Claude.
