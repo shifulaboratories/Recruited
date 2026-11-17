@@ -1,0 +1,294 @@
+// Recruited — the hiring side of Hired.
+//
+// Every content model carries userId, and every function in src/lib/data takes it
+// as its first positional argument. One account is one hiring workspace; nothing
+// lets one account read another's jobs, candidates or answers.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  OWNER
+  MEMBER
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String   @default("")
+  /// The company the person hires for. Shown on every public apply page.
+  companyName  String   @default("")
+  passwordHash String
+  role         UserRole @default(MEMBER)
+  createdAt    DateTime @default(now())
+
+  sessions     Session[]
+  connections  Connection[]
+  jobs         Job[]
+  listings     Listing[]
+  forms        Form[]
+  candidates   Candidate[]
+  applications Application[]
+  submissions  Submission[]
+  answers      Answer[]
+  notes        Note[]
+}
+
+model Session {
+  token     String   @id
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+/// One MCP connection URL. The token in the path resolves to exactly one user.
+model Connection {
+  id         String    @id @default(cuid())
+  userId     String
+  name       String    @default("Claude")
+  token      String    @unique
+  lastUsedAt DateTime?
+  createdAt  DateTime  @default(now())
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+enum JobStatus {
+  DRAFT
+  OPEN
+  CLOSED
+}
+
+/// A role you are hiring for. The description is the source every listing is written from.
+model Job {
+  id             String    @id @default(cuid())
+  userId         String
+  title          String
+  team           String    @default("")
+  location       String    @default("")
+  /// remote | hybrid | onsite
+  workplace      String    @default("remote")
+  /// full_time | part_time | contract | internship | temporary
+  employmentType String    @default("full_time")
+  salaryMin      Int?
+  salaryMax      Int?
+  salaryCurrency String    @default("USD")
+  /// hour | month | year
+  salaryPeriod   String    @default("year")
+  /// Markdown. The canonical description; listings are adapted from it.
+  description    String    @default("")
+  status         JobStatus @default(DRAFT)
+  archivedAt     DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  listings     Listing[]
+  forms        Form[]
+  applications Application[]
+
+  @@index([userId, status])
+}
+
+enum ListingStatus {
+  DRAFT
+  LIVE
+  PAUSED
+  CLOSED
+}
+
+/// One version of a job on one board. Two listings for the same job on the same board
+/// are a split test; each has its own apply link, which is how an application knows
+/// which listing brought it.
+model Listing {
+  id          String        @id @default(cuid())
+  userId      String
+  jobId       String
+  /// A key from src/lib/boards.ts: linkedin, indeed, onlinejobs_ph, wellfound, upwork, generic.
+  board       String
+  /// "A", "B", … — unique per job and board.
+  variant     String        @default("A")
+  title       String
+  /// Markdown as written. The board's own format is rendered from it on read.
+  body        String        @default("")
+  slug        String        @unique
+  status      ListingStatus @default(DRAFT)
+  /// Where the listing lives on the board once it is posted.
+  externalUrl String        @default("")
+  /// What this listing has cost so far, in cents of the job's currency.
+  spendCents  Int           @default(0)
+  postedAt    DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  job          Job           @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  applications Application[]
+
+  @@unique([jobId, board, variant])
+  @@index([userId])
+}
+
+enum FormKind {
+  APPLICATION
+  SCREENING
+}
+
+/// A set of questions. A job has at most one APPLICATION form (what the apply page asks)
+/// and any number of SCREENING forms (sent to an applicant after they apply).
+model Form {
+  id        String   @id @default(cuid())
+  userId    String
+  jobId     String
+  kind      FormKind
+  name      String   @default("")
+  /// FormQuestion[] — see src/lib/forms.ts. Replaced whole on update.
+  questions Json     @default("[]")
+  slug      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  job         Job          @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  submissions Submission[]
+
+  @@index([userId, jobId])
+}
+
+model Candidate {
+  id        String   @id @default(cuid())
+  userId    String
+  name      String
+  email     String
+  phone     String   @default("")
+  /// Free-form links: LinkedIn, portfolio, a published Hired resume.
+  links     String[] @default([])
+  createdAt DateTime @default(now())
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  applications Application[]
+  submissions  Submission[]
+
+  @@unique([userId, email])
+}
+
+enum Stage {
+  NEW
+  SCREEN
+  INTERVIEW
+  OFFER
+  HIRED
+  REJECTED
+}
+
+model Application {
+  id          String    @id @default(cuid())
+  userId      String
+  jobId       String
+  candidateId String
+  /// The listing whose apply link they used. Null when added by hand or imported.
+  listingId   String?
+  /// Where it came from when there is no listing: "referral", "sourced", a board name.
+  source      String    @default("")
+  stage       Stage     @default(NEW)
+  /// Whether every knockout question so far was answered acceptably. Null when no form had one.
+  qualified   Boolean?
+  /// A private token for the screening link sent to this applicant.
+  screenToken String    @unique
+  archivedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  job         Job          @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  candidate   Candidate    @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  listing     Listing?     @relation(fields: [listingId], references: [id], onDelete: SetNull)
+  submissions Submission[]
+  notes       Note[]
+
+  @@unique([jobId, candidateId])
+  @@index([userId, jobId, stage])
+}
+
+/// One filled-in form.
+model Submission {
+  id            String   @id @default(cuid())
+  userId        String
+  formId        String
+  applicationId String
+  candidateId   String
+  /// Time from the form opening to submit.
+  durationMs    Int      @default(0)
+  /// Did the page's recorder report at all? False means no telemetry (script blocked, API import).
+  recorded      Boolean  @default(false)
+  /// Knockout questions answered outside their rule: KnockoutResult[] from src/lib/forms.ts.
+  failed        Json     @default("[]")
+  createdAt     DateTime @default(now())
+
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  form        Form        @relation(fields: [formId], references: [id], onDelete: Cascade)
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  candidate   Candidate   @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  answers     Answer[]
+
+  @@index([userId, applicationId])
+}
+
+/// How an answer's text arrived. See src/lib/provenance.ts.
+enum Origin {
+  TYPED
+  PASTED
+  MIXED
+  /// Text appeared with no keystrokes or paste: browser autofill, an extension, a script.
+  INJECTED
+  /// No telemetry (choice questions, or the recorder did not run).
+  UNKNOWN
+}
+
+model Answer {
+  id           String  @id @default(cuid())
+  userId       String
+  submissionId String
+  questionId   String
+  /// The question as it was asked, so editing a form never rewrites an old answer.
+  label        String
+  value        String
+  origin       Origin  @default(UNKNOWN)
+  /// Share of the final text that was pasted or injected, 0..1.
+  pastedShare  Float   @default(0)
+  /// Raw recorder counts for this field. Kept so the verdict can be recomputed.
+  telemetry    Json    @default("{}")
+  /// Writing-style signals that often mark generated text. 0..1, a hint and never a verdict.
+  styleScore   Float   @default(0)
+  styleSignals Json    @default("[]")
+
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  submission Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+
+  @@index([userId, submissionId])
+}
+
+model Note {
+  id            String   @id @default(cuid())
+  userId        String
+  applicationId String
+  body          String
+  /// "app" or "mcp"
+  writtenBy     String   @default("app")
+  createdAt     DateTime @default(now())
+
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@index([userId, applicationId])
+}

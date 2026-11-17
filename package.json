@@ -1,0 +1,32 @@
+{
+  "name": "recruited",
+  "version": "0.1.0",
+  "private": true,
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "dev": "next dev",
+    "build": "prisma generate && next build",
+    "start": "prisma migrate deploy && next start",
+    "postinstall": "prisma generate",
+    "typecheck": "tsc --noEmit",
+    "check": "node --test tools/rules.test.mjs"
+  },
+  "//": "Everything lives in dependencies on purpose, as in Hired: a host that builds with NODE_ENV=production skips devDependencies, and the build must not fail on a missing compiler.",
+  "dependencies": {
+    "@prisma/client": "^6.19.3",
+    "@tailwindcss/postcss": "^4.1.8",
+    "@types/node": "^22.15.21",
+    "@types/react": "^19.1.6",
+    "@types/react-dom": "^19.1.5",
+    "next": "^15.3.2",
+    "postcss": "^8.5.4",
+    "prisma": "^6.19.3",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "tailwindcss": "^4.1.8",
+    "typescript": "^5.8.3",
+    "zod": "^3.25.28"
+  },
+  "license": "AGPL-3.0-only",
+  "description": "An applicant tracking system you run from a conversation: listings for every board, forms that know how an answer was written, and Claude over MCP."
+}
