@@ -185,6 +185,7 @@ export async function getApplication(userId: string, applicationId: string) {
       job: { select: { id: true, title: true } },
       listing: { select: { id: true, board: true, variant: true, title: true } },
       notes: { orderBy: { createdAt: "asc" } },
+      messages: { orderBy: { createdAt: "asc" } },
       submissions: {
         orderBy: { createdAt: "asc" },
         include: {
@@ -228,6 +229,16 @@ export async function getApplication(userId: string, applicationId: string) {
       })),
     })),
     notes: a.notes.map((n) => ({ id: n.id, body: n.body, writtenBy: n.writtenBy, at: n.createdAt })),
+    messages: a.messages.map((m) => ({
+      id: m.id,
+      kind: m.kind,
+      status: m.status,
+      subject: m.subject,
+      body: m.body,
+      writtenBy: m.writtenBy,
+      createdAt: m.createdAt,
+      sentAt: m.sentAt,
+    })),
   };
 }
 

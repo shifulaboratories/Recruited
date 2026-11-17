@@ -8,6 +8,7 @@ import * as jobs from "@/lib/data/jobs";
 import * as listings from "@/lib/data/listings";
 import * as applications from "@/lib/data/applications";
 import * as connections from "@/lib/data/connections";
+import * as messages from "@/lib/data/messages";
 import { updateAccount, userByLogin } from "@/lib/data/users";
 import { UserError } from "@/lib/data/errors";
 
@@ -110,4 +111,36 @@ export async function acceptProposal(applicationId: string) {
   const a = await applications.acceptProposal(user.id, applicationId);
   revalidatePath(`/applications/${applicationId}`);
   revalidatePath(`/jobs/${a.jobId}`);
+}
+
+export async function saveMessageDraft(_: ActionState, form: FormData): Promise<ActionState> {
+  const user = await requireUser();
+  const id = String(form.get("applicationId") ?? "");
+  const r = await attempt(
+    () =>
+      messages
+        .saveMessage(user.id, {
+          applicationId: id,
+          kind: String(form.get("kind") ?? "OTHER"),
+          subject: String(form.get("subject") ?? ""),
+          body: String(form.get("body") ?? ""),
+          writtenBy: "app",
+        })
+        .then(() => {}),
+    "Saved as a draft.",
+  );
+  revalidatePath(`/applications/${id}`);
+  return r;
+}
+
+export async function markMessageSent(messageId: string) {
+  const user = await requireUser();
+  const m = await messages.updateMessage(user.id, messageId, { status: "SENT" });
+  revalidatePath(`/applications/${m.applicationId}`);
+}
+
+export async function deleteMessageDraft(applicationId: string, messageId: string) {
+  const user = await requireUser();
+  await messages.deleteDraft(user.id, messageId);
+  revalidatePath(`/applications/${applicationId}`);
 }

@@ -39,6 +39,7 @@ model User {
   answers      Answer[]
   notes        Note[]
   uploads      Upload[]
+  messages     Message[]
 }
 
 model Session {
@@ -237,6 +238,7 @@ model Application {
   listing     Listing?     @relation(fields: [listingId], references: [id], onDelete: SetNull)
   submissions Submission[]
   notes       Note[]
+  messages    Message[]
 
   @@unique([jobId, candidateId])
   @@index([userId, jobId, stage])
@@ -336,6 +338,43 @@ model Note {
   /// "app" or "mcp"
   writtenBy     String   @default("app")
   createdAt     DateTime @default(now())
+
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@index([userId, applicationId])
+}
+
+enum MessageKind {
+  SCREENING_INVITE
+  INTERVIEW_INVITE
+  REJECTION
+  OFFER
+  OTHER
+}
+
+enum MessageStatus {
+  DRAFT
+  SENT
+}
+
+/// A message to an applicant. This server never sends mail: a draft is sent by
+/// the person from their own email (the app's "Open in email", or their
+/// assistant's mail connector) and then marked SENT, so the log says what each
+/// applicant was told and when.
+model Message {
+  id            String        @id @default(cuid())
+  userId        String
+  applicationId String
+  kind          MessageKind
+  status        MessageStatus @default(DRAFT)
+  subject       String        @default("")
+  body          String
+  /// "app" or "mcp"
+  writtenBy     String        @default("mcp")
+  sentAt        DateTime?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
 
   user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
   application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)

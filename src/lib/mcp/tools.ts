@@ -4,9 +4,11 @@ import * as listings from "@/lib/data/listings";
 import * as forms from "@/lib/data/forms";
 import * as applications from "@/lib/data/applications";
 import * as uploads from "@/lib/data/uploads";
+import * as messages from "@/lib/data/messages";
 import { UserError } from "@/lib/data/errors";
 import { BOARDS, BOARD_KEYS, boardByKey } from "@/lib/boards";
 import { QUESTION_TYPES } from "@/lib/forms";
+import { MESSAGE_KINDS } from "@/lib/messages";
 
 /**
  * Every tool and prompt, in one array each. The description IS the interface:
@@ -530,7 +532,7 @@ export const TOOLS: McpTool[] = [
     name: "move_stage",
     title: "Move an applicant",
     description:
-      "Move an application to another stage: NEW, SCREEN, INTERVIEW, OFFER, HIRED or REJECTED. Moving someone to REJECTED sends them nothing; tell the person if they want a message drafted.",
+      "Move an application to another stage: NEW, SCREEN, INTERVIEW, OFFER, HIRED or REJECTED. Moving a stage sends the applicant nothing; offer to draft the matching message with prep_message.",
     inputSchema: object({ application_id: str("The application's id."), stage: oneOf(STAGE_VALUES, "The new stage.") }, ["application_id", "stage"]),
     annotations: SET,
     handler: async (args, ctx) => {
@@ -547,6 +549,65 @@ export const TOOLS: McpTool[] = [
     handler: async (args, ctx) => {
       const note = await applications.addNote(ctx.userId, need(args, "application_id"), need(args, "body"), "mcp");
       return { id: note.id };
+    },
+  },
+  {
+    name: "prep_message",
+    title: "Prepare a message to an applicant",
+    description:
+      "Call this FIRST before writing any email to an applicant: a screening invite, an interview invite, a rejection, an offer. " +
+      "Returns who they are, the role, their stage and tier, their personal screening links (with whether they already filled each in and which files each asks for), every message they were sent before, and guidance for this kind of message. " +
+      "Follow the guidance. Never invent a time, a pay figure, a start date or a reason: if the person didn't give you one, ask. Never mention how an applicant's answers were typed or pasted in anything sent to them. " +
+      "Then save the draft with save_message. Saves nothing itself.",
+    inputSchema: object(
+      { application_id: str("The application's id."), kind: oneOf(MESSAGE_KINDS, "What the message is for. OTHER for anything else.") },
+      ["application_id", "kind"],
+    ),
+    annotations: READ,
+    handler: (args, ctx) => messages.prepMessage(ctx.userId, need(args, "application_id"), need(args, "kind"), ctx.baseUrl),
+  },
+  {
+    name: "save_message",
+    title: "Save or mark a message",
+    description:
+      "Save a message to an applicant as a draft, or record that it was sent. This server never sends email. " +
+      "To send, use the person's own mail connector if you have one (Gmail, Outlook) and only after they say send, then call this again with message_id and status SENT; " +
+      "otherwise tell them the draft is on the applicant's page in Recruited, where Open in email puts it in their mail app. " +
+      "Without message_id it adds a new message. With message_id it changes that draft: subject and body replace what was there. A SENT message can't be edited, because it is the record of what the applicant was told. " +
+      "Returns the message with a mailto link.",
+    inputSchema: object({
+      application_id: str("The application's id. Required when adding a new message."),
+      message_id: str("A message's id, to change a draft or mark it sent. Leave out to add a new one."),
+      kind: oneOf(MESSAGE_KINDS, "What the message is for. Required when adding."),
+      subject: str("The subject line."),
+      body: str("The whole message, plain text, as the applicant will read it. Replaces the draft's body when message_id is given."),
+      status: oneOf(["DRAFT", "SENT"], "DRAFT (default) or SENT once it has actually gone out."),
+    }),
+    annotations: ADD,
+    handler: async (args, ctx) => {
+      const status = s(args, "status") as "DRAFT" | "SENT" | undefined;
+      const id = s(args, "message_id");
+      const m = id
+        ? await messages.updateMessage(ctx.userId, id, { subject: s(args, "subject"), body: s(args, "body"), status })
+        : await messages.saveMessage(ctx.userId, {
+            applicationId: need(args, "application_id"),
+            kind: need(args, "kind"),
+            subject: s(args, "subject"),
+            body: need(args, "body"),
+            status,
+            writtenBy: "mcp",
+          });
+      const all = await messages.listMessages(ctx.userId, m.applicationId);
+      const saved = all.find((x) => x.id === m.id)!;
+      return {
+        id: saved.id,
+        kind: saved.kind,
+        status: saved.status,
+        sentAt: saved.sentAt,
+        subject: saved.subject,
+        mailto: saved.mailto,
+        page: `${ctx.baseUrl}/applications/${m.applicationId}`,
+      };
     },
   },
 ];
@@ -602,6 +663,23 @@ Do this in order, and stop to ask whenever you'd otherwise have to invent someth
 4. Report in a table: rank, name, proposed tier, met must-haves, the one thing that stands out, how the written answers arrived, and your suggestion (screen, hold, decline).
 5. Describe provenance as observation: "pasted", "typed", "likely written with AI". It's a reason to ask a follow-up question, never a reason on its own to rank someone lower.
 6. Don't move anyone or decide a tier until I say which suggestions to take.`,
+  },
+  {
+    name: "message_applicants",
+    title: "Message applicants",
+    description: "Draft one kind of message (screening invite, interview invite, rejection) for a group of applicants, each written to them, for you to review and send.",
+    arguments: [
+      { name: "job", description: "The role's title or id.", required: true },
+      { name: "who", description: "Who to write to, e.g. 'A-tier in NEW', 'everyone rejected this week'.", required: true },
+      { name: "kind", description: "screening invite, interview invite, rejection, offer or other.", required: true },
+    ],
+    render: (a) => `Draft a ${a.kind} for ${a.who} applying to "${a.job}".
+
+1. Find the job with list_jobs, then the applicants with list_applications. Show me the list and wait for me to confirm it before writing anything.
+2. For each one: prep_message, then write the message following its guidance, using their first name and, for a screening invite, their own screening link. Ask me once for anything the guidance needs that I haven't given you (a deadline, interview times, who they'll meet); never fill it in yourself.
+3. save_message each one as a DRAFT.
+4. Show me one in full and the rest as a list. If you have my mail connector, send only after I say so, then save_message each with status SENT. Otherwise tell me they're waiting on each applicant's page under Messages.
+5. Don't move anyone's stage unless I ask.`,
   },
 ];
 

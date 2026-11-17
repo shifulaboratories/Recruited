@@ -13,18 +13,17 @@
 - 19 MCP tools, 2 prompts, and four screens.
 - Tiers and ranking (17 Nov): proposals from `rank_applicants` with reasons and rank, decisions by the person (`set_tier` or the app), a per-job rubric, tier filter and sort, A-tier counts and cost per A-tier in `listing_report`. 21 tools.
 - File questions (17 Nov): one image or PDF per question, up to 10 MB, typed by its bytes and stored in Postgres; shown on the applicant page and opened by Claude with `read_upload`. 22 tools.
+- Messages to applicants (17 Nov): `prep_message` and `save_message`, a `message_applicants` prompt, and a message log on the applicant page with Open in email, Mark sent and Delete draft. The server never sends mail. 24 tools, 3 prompts.
 
 ## Next, in the order I'd take them
 
-1. **Messages to applicants.** Draft the screening invite, the rejection and the interview
-   ask; send through the person's own mail connector rather than from this server.
-2. **Importing from boards.** Paste an Indeed or LinkedIn applicant export (CSV) and add
+1. **Importing from boards.** Paste an Indeed or LinkedIn applicant export (CSV) and add
    everyone at once with their listing attributed.
-3. **Apply with Hired.** An applicant pastes their published Hired resume link
+2. **Apply with Hired.** An applicant pastes their published Hired resume link
    (`/r/<slug>/resume.json`, already built on the Hired side) and the form fills itself.
-4. **Interviews and offers.** Rounds, scorecards and offer versions, the hiring-side
+3. **Interviews and offers.** Rounds, scorecards and offer versions, the hiring-side
    mirror of what Hired has.
-5. **Deploy.** Dockerfile and a Railway template, as in Hired.
+4. **Deploy.** Dockerfile and a Railway template, as in Hired.
 
 ## What it deliberately doesn't do
 
