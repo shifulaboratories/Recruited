@@ -7,6 +7,7 @@ import { boardByKey, renderListing, toHtml } from "@/lib/boards";
 import { readQuestions } from "@/lib/forms";
 import { setJobStatus, setListingStatus } from "@/server/actions";
 import { CopyButton } from "@/components/forms";
+import { ImportApplicants } from "@/components/import-applicants";
 import { ProvenanceBar, QualifiedChip, StageChip, TierChip } from "@/components/provenance";
 
 export default async function JobPage({ params }: { params: Promise<{ id: string }> }) {
@@ -120,6 +121,15 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
             ))}
           </ul>
         )}
+        <details className="text-sm">
+          <summary className="cursor-pointer text-rt-muted hover:text-rt-foreground">Import applicants from a board export (CSV)</summary>
+          <div className="pt-3">
+            <ImportApplicants
+              jobId={job.id}
+              listings={job.listings.map((l) => ({ id: l.id, label: `${boardByKey(l.board)?.name ?? l.board} ${l.variant}: ${l.title}` }))}
+            />
+          </div>
+        </details>
       </section>
 
       <section className="space-y-3">
