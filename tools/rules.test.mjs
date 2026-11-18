@@ -7,6 +7,9 @@ import { QuestionsSchema, failedKnockouts, validateAnswer, readQuestions } from 
 import { mailtoLink, KIND_GUIDANCE, MESSAGE_KINDS } from "../src/lib/messages.ts";
 import { parseCsv, mapColumns, guessBoard, rowsToApplicants } from "../src/lib/csv.ts";
 import { panelView, offerChanges, readRatings, formatOfferPay } from "../src/lib/scorecards.ts";
+import { readProbes, ProbesSchema } from "../src/lib/probes.ts";
+import { checkReferenceAnswers, REFERENCE_QUESTIONS } from "../src/lib/references.ts";
+import { bestListing } from "../src/lib/listing-score.ts";
 
 const t = (o) => ({ ...EMPTY_TELEMETRY, ...o });
 
@@ -179,4 +182,41 @@ test("offers: changes between versions, and pay formatting", () => {
   assert.deepEqual(offerChanges(v1, { ...v1, payAmount: 40000, startDate: new Date("2026-12-01T00:00:00Z") }), ["payAmount"]);
   assert.equal(formatOfferPay(v1), "PHP 35,000 per month");
   assert.equal(formatOfferPay({ ...v1, payAmount: null }), "");
+});
+
+test("work samples and video answers: task and video questions parse with their own fields", () => {
+  const qs = QuestionsSchema.parse([
+    { id: "macro", label: "Write the reply", type: "task", brief: "A customer...", minutes: 30 },
+    { id: "hello", label: "Say hello", type: "video" },
+  ]);
+  assert.equal(qs[0].minutes, 30);
+  assert.equal(qs[1].maxSeconds, 90);
+  assert.equal(validateAnswer(qs[1], ""), null);
+  assert.throws(() => QuestionsSchema.parse([{ id: "v", label: "x", type: "video", maxSeconds: 900 }]));
+});
+
+test("probes: stored follow-up questions are read defensively", () => {
+  assert.deepEqual(readProbes(null), []);
+  const p = readProbes([{ question: "Walk me through the last angry customer you handled." }, { question: "short" }, "junk"]);
+  assert.equal(p.length, 1);
+  assert.equal(p[0].asked, false);
+  assert.throws(() => ProbesSchema.parse(Array.from({ length: 13 }, () => ({ question: "A long enough question?" }))));
+});
+
+test("references: three answers required, the growth one optional", () => {
+  const bad = checkReferenceAnswers({ context: "Manager for two years" });
+  assert.ok(bad.errors.strengths && bad.errors.again && !bad.errors.growth);
+  const ok = checkReferenceAnswers({ context: "x", strengths: "y", again: "z" });
+  assert.deepEqual(ok.errors, {});
+  assert.equal(ok.answers.length, REFERENCE_QUESTIONS.length);
+});
+
+test("listing score: judged on A-tier, cautious on small numbers", () => {
+  const row = (id, applicants, A, qualified, cost = null) => ({ listingId: id, board: "linkedin", variant: id, applicants, qualified, tiers: { A }, costPerATier: cost });
+  assert.equal(bestListing([row("A", 10, 1, 5)]), null);
+  const b = bestListing([row("A", 30, 1, 10), row("B", 8, 3, 6)]);
+  assert.equal(b.listingId, "B");
+  assert.equal(b.confident, true);
+  assert.equal(bestListing([row("A", 3, 1, 1, 60), row("B", 2, 1, 2, 30)]).listingId, "B");
+  assert.equal(bestListing([row("A", 3, 1, 1, 60), row("B", 2, 1, 2, 30)]).confident, false);
 });

@@ -4,7 +4,8 @@ import { formatPay, listJobs } from "@/lib/data/jobs";
 import { listApplications, STAGES } from "@/lib/data/applications";
 import { listInterviews } from "@/lib/data/interviews";
 import { boardByKey } from "@/lib/boards";
-import { createJob } from "@/server/actions";
+import { createJob, loadSampleAction } from "@/server/actions";
+import { dailyBrief } from "@/lib/data/brief";
 import { ActionForm } from "@/components/forms";
 import { Empty, Icon, PageHeader, Stat } from "@/components/ui";
 import { STAGE_LABEL, STAGE_TONE, StageChip } from "@/components/provenance";
@@ -16,11 +17,13 @@ const WEEK = 7 * 24 * 60 * 60 * 1000;
 export default async function JobsPage() {
   const user = await requireUser();
   const now = new Date();
-  const [jobs, { applications }, interviews] = await Promise.all([
+  const [jobs, { applications }, interviews, brief] = await Promise.all([
     listJobs(user.id),
     listApplications(user.id, { limit: 500 }),
     listInterviews(user.id, { from: now.toISOString(), to: new Date(now.getTime() + WEEK).toISOString(), status: "SCHEDULED" }),
+    dailyBrief(user.id, { now }),
   ]);
+  const today = todayItems(brief);
   const thisWeek = applications.filter((a) => now.getTime() - a.appliedAt.getTime() < WEEK).length;
   const aTier = applications.filter((a) => a.effectiveTier === "A" && a.stage !== "REJECTED" && a.stage !== "HIRED").length;
   const undecided = applications.filter((a) => a.tierIsProposal).length;
@@ -45,6 +48,31 @@ export default async function JobsPage() {
         <Stat i={4} label="Interviews, next 7 days" value={interviews.length} hint={interviews[0]?.scheduledAt ? `next: ${interviews[0].candidate}` : "none booked"} />
       </div>
 
+      {today.length > 0 && (
+        <section className="space-y-3">
+          <div className="flex items-baseline gap-3">
+            <h2 className="h-section">Today</h2>
+            <span className="text-xs text-rt-faint">Or ask Claude: &ldquo;What needs me today?&rdquo;</span>
+          </div>
+          <ul className="card rise divide-y divide-rt-border overflow-hidden" style={{ ["--i" as string]: 5 }}>
+            {today.map((t, k) => (
+              <li key={k}>
+                <Link href={t.href} className="flex items-center gap-3 px-4 py-3 hover:bg-rt-subtle transition-colors">
+                  <span className="inset grid place-items-center w-8 h-8 shrink-0" style={{ color: t.tone }}>
+                    <Icon name={t.icon} size={15} />
+                  </span>
+                  <span className="flex-1 min-w-0">
+                    <span className="block text-[13.5px] font-medium truncate">{t.title}</span>
+                    <span className="block text-[12px] text-rt-muted truncate">{t.sub}</span>
+                  </span>
+                  <Icon name="chevron" size={14} className="text-rt-faint" />
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       <section className="space-y-3">
         <div className="flex items-center gap-3">
           <h2 className="h-section">Roles</h2>
@@ -61,7 +89,12 @@ export default async function JobsPage() {
         </div>
 
         {jobs.length === 0 ? (
-          <Empty icon="jobs" title="No roles yet" ask="I'm hiring an operations VA, full time. Post it on OnlineJobs.ph and LinkedIn." />
+          <div className="space-y-3">
+            <Empty icon="jobs" title="No roles yet" ask="I'm hiring an operations VA, full time. Post it on OnlineJobs.ph and LinkedIn." />
+            <form action={loadSampleAction} className="text-center">
+              <button className="btn btn-quiet text-xs">Or look around a sample role first</button>
+            </form>
+          </div>
         ) : (
           <div className="grid md:grid-cols-2 gap-3">
             {jobs.map((j, idx) => {
@@ -127,4 +160,43 @@ export default async function JobsPage() {
       </section>
     </div>
   );
+}
+
+type Brief = Awaited<ReturnType<typeof dailyBrief>>;
+
+/** The few things on the brief worth a row on the home screen, time-bound first. */
+function todayItems(b: Brief) {
+  const out: { icon: "calendar" | "clock" | "sparkle" | "note" | "mail" | "people" | "check"; tone: string; title: string; sub: string; href: string }[] = [];
+  const at = (d: Date | null) => (d ? d.toLocaleString("en-US", { weekday: "short", hour: "numeric", minute: "2-digit" }) : "");
+  for (const i of b.interviewsNext48h.items)
+    out.push({
+      icon: "calendar",
+      tone: "var(--rt-primary)",
+      title: `${i.title} with ${i.candidate}`,
+      sub: `${at(i.at)} · ${i.job}${i.openProbes ? ` · ${i.openProbes} question${i.openProbes === 1 ? "" : "s"} to ask` : ""}`,
+      href: `/applications/${i.applicationId}`,
+    });
+  for (const i of b.scorecardsMissing.items.slice(0, 3))
+    out.push({ icon: "note", tone: "var(--rt-warning)", title: `Scorecard for ${i.candidate}`, sub: `${i.title} · ${i.job}`, href: `/applications/${i.applicationId}` });
+  if (b.proposalsToDecide.count)
+    out.push({
+      icon: "sparkle",
+      tone: "var(--rt-ai)",
+      title: `${b.proposalsToDecide.count} proposed tier${b.proposalsToDecide.count === 1 ? "" : "s"} to decide`,
+      sub: b.proposalsToDecide.items.slice(0, 3).map((p) => `${p.candidate} (${p.proposedTier})`).join(", "),
+      href: "/applications",
+    });
+  if (b.unsentDrafts.count)
+    out.push({
+      icon: "mail",
+      tone: "var(--rt-muted)",
+      title: `${b.unsentDrafts.count} draft${b.unsentDrafts.count === 1 ? "" : "s"} to send`,
+      sub: b.unsentDrafts.items.slice(0, 3).map((m) => m.candidate).join(", "),
+      href: `/applications/${b.unsentDrafts.items[0].applicationId}`,
+    });
+  for (const i of b.waitingForApplicantToPickATime.items.slice(0, 2))
+    out.push({ icon: "clock", tone: "var(--rt-faint)", title: `${i.candidate} hasn't picked a time yet`, sub: `${i.title} · ${i.slots} times offered`, href: `/applications/${i.applicationId}` });
+  for (const r of b.referencesAnswered.items.slice(0, 2))
+    out.push({ icon: "check", tone: "var(--rt-success)", title: `${r.referee} answered a reference for ${r.candidate}`, sub: r.job, href: `/applications/${r.applicationId}` });
+  return out.slice(0, 7);
 }

@@ -19,14 +19,17 @@ enum UserRole {
 }
 
 model User {
-  id           String   @id @default(cuid())
-  email        String   @unique
-  name         String   @default("")
+  id             String   @id @default(cuid())
+  email          String   @unique
+  name           String   @default("")
   /// The company the person hires for. Shown on every public apply page.
-  companyName  String   @default("")
-  passwordHash String
-  role         UserRole @default(MEMBER)
-  createdAt    DateTime @default(now())
+  companyName    String   @default("")
+  /// A few sentences about the company, shown on every public job page.
+  companyAbout   String   @default("")
+  companyWebsite String   @default("")
+  passwordHash   String
+  role           UserRole @default(MEMBER)
+  createdAt      DateTime @default(now())
 
   sessions     Session[]
   connections  Connection[]
@@ -43,6 +46,7 @@ model User {
   interviews   Interview[]
   scorecards   Scorecard[]
   offers       Offer[]
+  references   Reference[]
 }
 
 model Session {
@@ -95,6 +99,10 @@ model Job {
   /// What makes an A, B or C applicant for this role, in the hiring person's words. Read by rank_applicants.
   rubric         String    @default("")
   status         JobStatus @default(DRAFT)
+  /// What applicants are told happens after they apply, shown on the thank-you page. Empty uses the default.
+  afterApply     String    @default("")
+  /// Part of the demo workspace (load_sample_workspace). wipe_sample_workspace deletes only these.
+  sample         Boolean   @default(false)
   archivedAt     DateTime?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
@@ -180,6 +188,7 @@ model Candidate {
   phone     String   @default("")
   /// Free-form links: LinkedIn, portfolio, a published Hired resume.
   links     String[] @default([])
+  sample    Boolean  @default(false)
   createdAt DateTime @default(now())
 
   user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -206,17 +215,17 @@ enum Stage {
 }
 
 model Application {
-  id          String    @id @default(cuid())
-  userId      String
-  jobId       String
-  candidateId String
+  id             String    @id @default(cuid())
+  userId         String
+  jobId          String
+  candidateId    String
   /// The listing whose apply link they used. Null when added by hand or imported.
-  listingId   String?
+  listingId      String?
   /// Where it came from when there is no listing: "referral", "sourced", a board name.
-  source      String    @default("")
-  stage       Stage     @default(NEW)
+  source         String    @default("")
+  stage          Stage     @default(NEW)
   /// Whether every knockout question so far was answered acceptably. Null when no form had one.
-  qualified   Boolean?
+  qualified      Boolean?
   /// The tier a person decided (in the app, or by telling their assistant). Null until then.
   tier           Tier?
   tierReason     String    @default("")
@@ -230,10 +239,15 @@ model Application {
   proposedRank   Int?
   proposedAt     DateTime?
   /// A private token for the screening link sent to this applicant.
-  screenToken String    @unique
-  archivedAt  DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  screenToken    String    @unique
+  /// Questions to ask on the call, written for this applicant: Probe[] (src/lib/probes.ts).
+  probes         Json      @default("[]")
+  /// An unlisted read-only link to this applicant (/s/<slug>). Null when not shared.
+  shareSlug      String?   @unique
+  sharedAt       DateTime?
+  archivedAt     DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   job         Job          @relation(fields: [jobId], references: [id], onDelete: Cascade)
@@ -244,6 +258,7 @@ model Application {
   messages    Message[]
   interviews  Interview[]
   offers      Offer[]
+  references  Reference[]
 
   @@unique([jobId, candidateId])
   @@index([userId, jobId, stage])
@@ -285,21 +300,21 @@ enum Origin {
 }
 
 model Answer {
-  id           String  @id @default(cuid())
+  id           String @id @default(cuid())
   userId       String
   submissionId String
   questionId   String
   /// The question as it was asked, so editing a form never rewrites an old answer.
   label        String
   value        String
-  origin       Origin  @default(UNKNOWN)
+  origin       Origin @default(UNKNOWN)
   /// Share of the final text that was pasted or injected, 0..1.
-  pastedShare  Float   @default(0)
+  pastedShare  Float  @default(0)
   /// Raw recorder counts for this field. Kept so the verdict can be recomputed.
-  telemetry    Json    @default("{}")
+  telemetry    Json   @default("{}")
   /// Writing-style signals that often mark generated text. 0..1, a hint and never a verdict.
-  styleScore   Float   @default(0)
-  styleSignals Json    @default("[]")
+  styleScore   Float  @default(0)
+  styleSignals Json   @default("[]")
 
   user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   submission Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
@@ -318,15 +333,15 @@ model Answer {
 ///
 /// It always belongs to one answer and cascades with it.
 model Upload {
-  id       String @id @default(cuid())
-  userId   String
-  answerId String
+  id        String   @id @default(cuid())
+  userId    String
+  answerId  String
   /// As it arrived, cleaned of path separators. What a download is called.
-  filename String
+  filename  String
   /// Sniffed from the file's first bytes, never trusted from the browser.
-  mimeType String
-  size     Int
-  data     Bytes
+  mimeType  String
+  size      Int
+  data      Bytes
   createdAt DateTime @default(now())
 
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -410,6 +425,10 @@ model Interview {
   interviewers  String          @default("")
   /// A meeting link or an address.
   location      String          @default("")
+  /// Times offered to the applicant to pick from. Empty once they've picked or when a time was set directly.
+  slots         DateTime[]      @default([])
+  /// The applicant's booking link (/book/<token>) while slots are on offer.
+  bookToken     String?         @unique
   status        InterviewStatus @default(SCHEDULED)
   createdAt     DateTime        @default(now())
   updatedAt     DateTime        @updatedAt
@@ -483,5 +502,27 @@ model Offer {
   application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
 
   @@unique([applicationId, version])
+  @@index([userId, applicationId])
+}
+
+/// Someone who can speak to an applicant's work. They answer three questions
+/// through a personal link (/ref/<token>); nothing is emailed by this server.
+model Reference {
+  id            String    @id @default(cuid())
+  userId        String
+  applicationId String
+  name          String
+  email         String    @default("")
+  /// How they know the applicant, as the applicant or hirer put it: "her manager at Lumen, 2022–2024".
+  relation      String    @default("")
+  token         String    @unique
+  /// { questionId, label, value }[] once they answer.
+  answers       Json      @default("[]")
+  submittedAt   DateTime?
+  createdAt     DateTime  @default(now())
+
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
   @@index([userId, applicationId])
 }

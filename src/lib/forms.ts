@@ -19,11 +19,18 @@ export const QUESTION_TYPES = [
   "single_choice",
   "multi_choice",
   "file",
+  /** A work sample: a brief to read and a written deliverable. Tracked like long_text. */
+  "task",
+  /** A short answer on camera, recorded in the browser (or uploaded) and kept like a file. */
+  "video",
 ] as const;
 export type QuestionType = (typeof QUESTION_TYPES)[number];
 
 /** The types whose answers are typed by a person, and so get provenance tracking. */
-export const WRITTEN_TYPES: QuestionType[] = ["short_text", "long_text"];
+export const WRITTEN_TYPES: QuestionType[] = ["short_text", "long_text", "task"];
+
+/** The types whose answer is an attachment rather than text. */
+export const FILE_TYPES: QuestionType[] = ["file", "video"];
 
 export const KnockoutSchema = z
   .object({
@@ -53,6 +60,12 @@ export const QuestionSchema = z
     maxWords: z.number().int().positive().optional(),
     /** For file: what may be attached. One file per question, up to 10 MB. */
     accept: z.enum(["image", "pdf", "image_or_pdf"]).default("image_or_pdf"),
+    /** For task: the work to do, in markdown. Shown above the answer box. */
+    brief: z.string().max(6000).default(""),
+    /** For task: roughly how long it should take, in minutes. Shown to the applicant. */
+    minutes: z.number().int().positive().max(480).optional(),
+    /** For video: the longest recording, in seconds. */
+    maxSeconds: z.number().int().min(15).max(300).default(90),
   })
   .strict();
 
@@ -133,6 +146,7 @@ export function validateAnswer(q: FormQuestion, value: string): string | null {
     case "single_choice":
       return q.options.includes(v) ? null : "Choose one of the options.";
     case "file":
+    case "video":
       return null;
     case "multi_choice":
       return v.split("\n").every((x) => q.options.includes(x)) ? null : "Choose from the options.";

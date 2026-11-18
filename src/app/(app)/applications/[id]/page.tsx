@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { requireUser } from "@/lib/auth";
+import { baseUrl, requireUser } from "@/lib/auth";
+import { listReferences } from "@/lib/data/references";
 import { getApplication, STAGES, TIERS } from "@/lib/data/applications";
 import { boardByKey } from "@/lib/boards";
 import { filePath } from "@/lib/data/uploads";
@@ -11,6 +12,11 @@ import {
   addNote,
   addScorecardAction,
   deleteMessageDraft,
+  deleteReferenceAction,
+  offerTimesAction,
+  requestReferenceAction,
+  shareApplicantAction,
+  toggleProbe,
   markMessageSent,
   moveStage,
   recordOfferAction,
@@ -25,6 +31,7 @@ import { OFFER_TERM_LABEL, RECOMMENDATION_LABEL, RECOMMENDATIONS } from "@/lib/s
 import { KIND_LABEL, MAILTO_SAFE_LENGTH, MESSAGE_KINDS, mailtoLink } from "@/lib/messages";
 import { ArrivalBar, OriginBadge, ProvenanceBar, QualifiedChip, STAGE_LABEL, STAGE_TONE, StyleBadge, TierChip, tierTone } from "@/components/provenance";
 import { Avatar, Icon, SectionHead } from "@/components/ui";
+import { RecordedVideo } from "@/components/video-answer";
 
 function minutes(ms: number) {
   const m = Math.round(ms / 60000);
@@ -36,6 +43,8 @@ export default async function ApplicationPage({ params }: { params: Promise<{ id
   const user = await requireUser();
   const a = await getApplication(user.id, id);
   const io = await interviewsAndOffers(user.id, id);
+  const refs = await listReferences(user.id, id);
+  const base = await baseUrl();
   const latestOffer = io.offers.at(-1);
   const board = a.listing ? `${boardByKey(a.listing.board)?.name ?? a.listing.board} · listing ${a.listing.variant}` : a.source || "added by hand";
   const tone = tierTone(a.effectiveTier);
@@ -140,6 +149,70 @@ export default async function ApplicationPage({ params }: { params: Promise<{ id
             What the browser saw, not proof of who wrote it. Style labels misfire on second-language writers and grammar tools; ask on the call.
           </p>
         </section>
+
+        <section className="card rise p-5 space-y-3" style={{ ["--i" as string]: 3 }}>
+          <div className="flex items-center gap-2">
+            <h2 className="h-section flex-1">Ask on the call</h2>
+            {a.probes.length > 0 && (
+              <span className="text-[11.5px] text-rt-faint tabular">
+                {a.probes.filter((p) => p.asked).length} of {a.probes.length} asked
+              </span>
+            )}
+          </div>
+          {a.probes.length === 0 ? (
+            <p className="text-[12.5px] text-rt-muted">
+              Ask Claude: <span className="text-rt-foreground">&ldquo;Prepare me for the call with {a.candidate.name.split(/\s+/)[0]}&rdquo;</span>. It writes follow-up questions aimed at the answers worth a second look.
+            </p>
+          ) : (
+            <ol className="space-y-2.5">
+              {a.probes.map((p, i) => (
+                <li key={i} className={`flex gap-2.5 ${p.asked ? "opacity-60" : ""}`}>
+                  <form action={toggleProbe.bind(null, a.id, i, !p.asked)}>
+                    <button
+                      aria-label={p.asked ? "Mark not asked" : "Mark asked"}
+                      aria-pressed={p.asked}
+                      className={`mt-0.5 w-[18px] h-[18px] rounded-md grid place-items-center ${p.asked ? "bg-rt-primary text-white" : "inset"}`}
+                    >
+                      {p.asked && (
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" aria-hidden="true">
+                          <path d="M20 6 9 17l-5-5" />
+                        </svg>
+                      )}
+                    </button>
+                  </form>
+                  <div className="min-w-0 space-y-0.5">
+                    <p className={`text-[13.5px] leading-snug ${p.asked ? "line-through decoration-rt-faint" : ""}`}>{p.question}</p>
+                    {p.why && <p className="text-[11.5px] text-rt-faint leading-snug">{p.why}</p>}
+                    {p.note && <p className="text-[12px] text-rt-muted">They said: {p.note}</p>}
+                  </div>
+                </li>
+              ))}
+            </ol>
+          )}
+        </section>
+
+        <section className="card rise p-5 space-y-3" style={{ ["--i" as string]: 4 }}>
+          <div className="flex items-center gap-2">
+            <h2 className="h-section flex-1">Share</h2>
+            <form action={shareApplicantAction.bind(null, a.id, !a.sharePath)}>
+              <button className={`btn text-xs ${a.sharePath ? "" : "btn-primary"}`}>{a.sharePath ? "Turn off" : "Make a link"}</button>
+            </form>
+          </div>
+          {a.sharePath ? (
+            <div className="space-y-2">
+              <code className="block text-[11.5px] inset px-2.5 py-2 break-all">{`${base}${a.sharePath}`}</code>
+              <div className="flex items-center gap-2">
+                <CopyButton text={`${base}${a.sharePath}`} label="Copy link" />
+                <a className="text-xs link" href={a.sharePath} target="_blank" rel="noreferrer">
+                  Preview
+                </a>
+              </div>
+              <p className="text-[11.5px] text-rt-faint leading-snug">Anyone with the link sees the answers, how they arrived, the tier and scorecards. Never the email, phone, notes or files.</p>
+            </div>
+          ) : (
+            <p className="text-[12.5px] text-rt-muted">A read-only link for a co-founder or hiring manager without an account.</p>
+          )}
+        </section>
       </aside>
 
       <div className="space-y-10 min-w-0 lg:order-1">
@@ -173,8 +246,10 @@ export default async function ApplicationPage({ params }: { params: Promise<{ id
                     {x.files.length > 0 ? (
                       <div className="flex flex-wrap gap-3">
                         {x.files.map((f) => (
-                          <a key={f.id} href={filePath(f.id)} target="_blank" rel="noreferrer" className="block group">
-                            {f.mimeType.startsWith("image/") && f.mimeType !== "image/heic" ? (
+                          <a key={f.id} href={f.mimeType.startsWith("video/") ? undefined : filePath(f.id)} target="_blank" rel="noreferrer" className="block group w-full">
+                            {f.mimeType.startsWith("video/") ? (
+                              <RecordedVideo src={filePath(f.id)} className="w-full max-w-[520px] aspect-video rounded-lg bg-black" />
+                            ) : f.mimeType.startsWith("image/") && f.mimeType !== "image/heic" ? (
                               // eslint-disable-next-line @next/next/no-img-element
                               <img src={filePath(f.id)} alt={f.filename} className="max-h-56 max-w-full rounded border border-rt-border" />
                             ) : (
@@ -242,7 +317,7 @@ export default async function ApplicationPage({ params }: { params: Promise<{ id
               <span className="font-mono text-[11px] uppercase tracking-wide text-rt-muted">Round {iv.round}</span>
               <span className="font-medium">{iv.title}</span>
               <span className="text-xs text-rt-muted">
-                {iv.scheduledAt ? <LocalTime iso={iv.scheduledAt.toISOString()} /> : "No time set"}
+                {iv.scheduledAt ? <LocalTime iso={iv.scheduledAt.toISOString()} /> : iv.bookingPath ? `Waiting for them to pick one of ${iv.slots.length} times` : "No time set"}
                 {iv.durationMin ? ` · ${iv.durationMin} min` : ""} · {iv.format.replace("_", " ")}
                 {iv.interviewers && ` · with ${iv.interviewers}`}
               </span>
@@ -257,6 +332,38 @@ export default async function ApplicationPage({ params }: { params: Promise<{ id
                   <span className="text-rt-muted">{iv.location}</span>
                 )}
               </div>
+            )}
+            {iv.bookingPath && (
+              <div className="inset p-3 space-y-2">
+                <p className="text-[12.5px] text-rt-muted">
+                  Offered:{" "}
+                  {iv.slots.map((t, k) => (
+                    <span key={t.toISOString()}>
+                      {k > 0 && ", "}
+                      <LocalTime iso={t.toISOString()} />
+                    </span>
+                  ))}
+                </p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <CopyButton text={`${base}${iv.bookingPath}`} label="Copy booking link" />
+                  <span className="text-[11.5px] text-rt-faint">They see these in their own time zone and pick one.</span>
+                </div>
+              </div>
+            )}
+            {iv.status === "SCHEDULED" && !iv.scheduledAt && !iv.bookingPath && (
+              <details className="text-sm">
+                <summary className="btn btn-quiet text-xs cursor-pointer">Let them pick a time</summary>
+                <ActionForm action={offerTimesAction} submit="Offer these times" className="pt-3">
+                  <input type="hidden" name="applicationId" value={a.id} />
+                  <input type="hidden" name="interviewId" value={iv.id} />
+                  <p className="text-xs text-rt-faint">Times you&apos;re free, in your time zone. Leave any you don&apos;t need empty.</p>
+                  <div className="grid gap-2 sm:grid-cols-3">
+                    <DateTimeInput name="slot" />
+                    <DateTimeInput name="slot" />
+                    <DateTimeInput name="slot" />
+                  </div>
+                </ActionForm>
+              </details>
             )}
             <div className="seg" role="group" aria-label="Interview status">
               {(["SCHEDULED", "DONE", "CANCELLED", "NO_SHOW"] as const).map((st) => (
@@ -323,6 +430,54 @@ export default async function ApplicationPage({ params }: { params: Promise<{ id
             </div>
             <input className="field" name="interviewers" placeholder="Who they'll meet" />
             <input className="field" name="location" placeholder="Meeting link or address" />
+          </ActionForm>
+        </details>
+      </section>
+
+      <section className="space-y-3">
+        <div className="flex flex-wrap items-baseline gap-x-3">
+          <h2 className="h-section">References</h2>
+          <span className="text-xs text-rt-faint">Four short questions on a link. Nothing is sent from here.</span>
+        </div>
+        {refs.length === 0 && <p className="card p-5 text-rt-muted">No references yet. Ask Claude to request one, or add a referee below.</p>}
+        {refs.map((r) => (
+          <div key={r.id} className="card p-5 space-y-3">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <span className="font-medium">{r.name}</span>
+              {r.relation && <span className="text-xs text-rt-muted">{r.relation}</span>}
+              <span className="chip" style={{ ["--tone" as string]: r.submittedAt ? "var(--rt-success)" : "var(--rt-faint)" }}>
+                <span className="dot" />
+                {r.submittedAt ? "Answered" : "Waiting"}
+              </span>
+              <span className="flex-1" />
+              {!r.submittedAt && <CopyButton text={`${base}${r.path}`} label="Copy link" />}
+              <form action={deleteReferenceAction.bind(null, a.id, r.id)}>
+                <button className="text-xs text-rt-muted hover:text-rt-foreground px-1">Remove</button>
+              </form>
+            </div>
+            {r.answers.length > 0 && (
+              <dl className="space-y-2.5">
+                {r.answers
+                  .filter((x) => x.answer)
+                  .map((x) => (
+                    <div key={x.id}>
+                      <dt className="text-[12.5px] font-medium text-rt-muted">{x.question}</dt>
+                      <dd className="whitespace-pre-wrap text-[14px] leading-relaxed">{x.answer}</dd>
+                    </div>
+                  ))}
+              </dl>
+            )}
+          </div>
+        ))}
+        <details className="text-sm">
+          <summary className="btn btn-quiet text-xs cursor-pointer">Ask a referee</summary>
+          <ActionForm action={requestReferenceAction} submit="Make the link" className="pt-3">
+            <input type="hidden" name="applicationId" value={a.id} />
+            <div className="grid gap-3 sm:grid-cols-2">
+              <input className="field" name="name" placeholder="Referee's name" />
+              <input className="field" name="email" type="email" placeholder="Their email (optional)" />
+            </div>
+            <input className="field" name="relation" placeholder="How they know them, e.g. manager at Acme, 2022 to 2024" />
           </ActionForm>
         </details>
       </section>

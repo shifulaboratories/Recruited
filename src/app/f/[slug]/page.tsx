@@ -13,18 +13,18 @@ export default async function ScreeningPage({ params, searchParams }: { params: 
   const f = t ? await publicScreening(slug, t) : null;
   if (!f) notFound();
   return (
-    <main className="max-w-2xl mx-auto px-4 py-10 space-y-6">
-      <header className="space-y-1">
+    <main className="max-w-[720px] mx-auto px-4 py-10 md:py-16 space-y-6">
+      <header className="rise space-y-2">
         <p className="eyebrow">
           {f.company ? `${f.company} · ` : ""}
           {f.jobTitle}
         </p>
-        <h1 className="text-3xl font-semibold" style={{ letterSpacing: "var(--rt-tracking-display)" }}>
+        <h1 className="text-[32px] md:text-[40px] font-semibold leading-[1.05]" style={{ letterSpacing: "var(--rt-tracking-display)" }}>
           {f.formName}
         </h1>
         <p className="text-rt-muted">Hi {f.firstName}, thanks for applying. A few more questions before we talk.</p>
       </header>
-      <section className="card p-5 md:p-6">
+      <section className="card p-5 md:p-7" style={{ boxShadow: "var(--rt-shadow-raised)" }}>
         {f.done ? (
           <p className="text-rt-muted">You&apos;ve already sent this form. Thank you.</p>
         ) : (
@@ -33,11 +33,14 @@ export default async function ScreeningPage({ params, searchParams }: { params: 
             endpoint={`/api/screen/${slug}?t=${encodeURIComponent(t!)}`}
             askIdentity={false}
             submitLabel="Send answers"
-            doneText="Thanks, your answers are in."
+            doneTitle="Your answers are in."
+            doneText="Thanks for taking the time."
+            nextSteps={f.afterApply}
+            company={f.company}
           />
         )}
       </section>
-      <footer className="text-xs text-rt-faint flex items-center gap-2">
+      <footer className="text-xs text-rt-faint flex items-center justify-center gap-2">
         <span>Hiring with</span> <Lockup size={12} />
       </footer>
     </main>

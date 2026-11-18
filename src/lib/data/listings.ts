@@ -1,6 +1,7 @@
 import type { ListingStatus, Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { notFound, UserError } from "@/lib/data/errors";
+import { bestListing } from "@/lib/listing-score";
 import { requireJob } from "@/lib/data/jobs";
 import { BOARD_KEYS, boardByKey, renderListing } from "@/lib/boards";
 import { slug } from "@/lib/ids";
@@ -125,5 +126,5 @@ export async function listingReport(userId: string, jobId: string) {
       aTierPerHundred: spend ? Math.round((tiers.A / spend) * 100 * 100) / 100 : null,
     };
   });
-  return { jobId: job.id, title: job.title, currency: job.salaryCurrency, listings: rows, unattributed };
+  return { jobId: job.id, title: job.title, currency: job.salaryCurrency, listings: rows, unattributed, best: bestListing(rows) };
 }

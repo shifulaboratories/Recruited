@@ -5,8 +5,9 @@ import { applyPath, listingReport } from "@/lib/data/listings";
 import { listApplications, STAGES } from "@/lib/data/applications";
 import { boardByKey, renderListing, toHtml } from "@/lib/boards";
 import { readQuestions } from "@/lib/forms";
-import { setJobStatus, setListingStatus } from "@/server/actions";
-import { CopyButton } from "@/components/forms";
+import { closeOutAction, setJobStatus, setListingStatus } from "@/server/actions";
+import { closeOutJob, DEFAULT_CLOSEOUT } from "@/lib/data/closeout";
+import { ActionForm, CopyButton } from "@/components/forms";
 import { ImportApplicants } from "@/components/import-applicants";
 import { Board } from "@/components/board";
 import { Empty, Icon, PageHeader, SectionHead } from "@/components/ui";
@@ -26,6 +27,9 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
   const report = await listingReport(user.id, job.id);
   const { applications } = await listApplications(user.id, { jobId: job.id, sort: "tier", limit: 500 });
   const byId = new Map(report.listings.map((r) => [r.listingId, r]));
+  const filled = job.status === "CLOSED" || applications.some((a) => a.stage === "HIRED");
+  const loop = filled ? await closeOutJob(user.id, job.id, { dryRun: true }) : null;
+  const pending = loop?.wouldDraft ?? 0;
 
   return (
     <div className="space-y-10">
@@ -85,6 +89,41 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
         </details>
       </section>
 
+      {loop && pending > 0 && (
+        <section className="card rise p-5 sm:p-6 space-y-4" style={{ boxShadow: "var(--rt-shadow-card), inset 3px 0 0 var(--rt-primary)" }}>
+          <div className="space-y-1">
+            <h2 className="h-section">Close the loop</h2>
+            <p className="text-[13px] text-rt-muted">
+              {pending} {pending === 1 ? "person hasn't" : "people haven't"} heard back:{" "}
+              {loop.applicants
+                .slice(0, 6)
+                .map((x) => x.name)
+                .join(", ")}
+              {pending > 6 ? ` and ${pending - 6} more` : ""}. This saves a short, kind note for each as a draft on their page; nothing is sent until you send it.
+            </p>
+          </div>
+          <details className="text-sm">
+            <summary className="btn btn-primary text-xs cursor-pointer">Write the notes</summary>
+            <ActionForm action={closeOutAction} submit={`Save ${pending} draft${pending === 1 ? "" : "s"}`} className="pt-3">
+              <input type="hidden" name="jobId" value={job.id} />
+              <input className="field" name="subject" defaultValue={DEFAULT_CLOSEOUT.subject} />
+              <textarea className="field min-h-48" name="body" defaultValue={DEFAULT_CLOSEOUT.body} />
+              <p className="text-[11.5px] text-rt-faint">
+                {"{first_name}"}, {"{job}"}, {"{at_company}"} and {"{from}"} are filled in for each person.
+              </p>
+              <label className="flex items-center gap-2 text-[13px] text-rt-muted">
+                <input type="checkbox" name="moveToRejected" defaultChecked /> Move them to Not this time
+              </label>
+              {job.status !== "CLOSED" && (
+                <label className="flex items-center gap-2 text-[13px] text-rt-muted">
+                  <input type="checkbox" name="closeJob" /> Close the role and its listings
+                </label>
+              )}
+            </ActionForm>
+          </details>
+        </section>
+      )}
+
       <section>
         <SectionHead title="Listings" count={job.listings.length} />
         {job.listings.length === 0 ? (
@@ -110,6 +149,16 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
                       </p>
                       <p className="font-medium truncate mt-0.5">{l.title}</p>
                     </div>
+                    {report.best?.listingId === l.id && (
+                      <span
+                        className="chip"
+                        style={{ ["--tone" as string]: "var(--rt-tier-a)" }}
+                        title={`Leads on ${report.best.by}.${report.best.note ? ` ${report.best.note}` : ""}`}
+                      >
+                        <span className="dot" />
+                        {report.best.confident ? "Best so far" : "Leading"}
+                      </span>
+                    )}
                     <StageChip stage={l.status} />
                   </div>
                   <dl className="grid grid-cols-2 sm:grid-cols-4 gap-2">

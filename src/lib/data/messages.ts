@@ -5,6 +5,7 @@ import { requireApplication, screeningPath } from "@/lib/data/applications";
 import { readQuestions } from "@/lib/forms";
 import { KIND_GUIDANCE, MESSAGE_KINDS, mailtoLink } from "@/lib/messages";
 import { formatOfferPay } from "@/lib/scorecards";
+import { bookingPath } from "@/lib/data/interviews";
 
 /**
  * Messages to applicants. This server never sends mail; it keeps drafts and a
@@ -36,7 +37,7 @@ export async function prepMessage(userId: string, applicationId: string, kind: s
       interviews: {
         where: { status: "SCHEDULED" },
         orderBy: { round: "asc" },
-        select: { id: true, round: true, title: true, format: true, scheduledAt: true, durationMin: true, interviewers: true, location: true },
+        select: { id: true, round: true, title: true, format: true, scheduledAt: true, durationMin: true, interviewers: true, location: true, slots: true, bookToken: true },
       },
       offers: { orderBy: { version: "desc" }, take: 1 },
     },
@@ -57,12 +58,17 @@ export async function prepMessage(userId: string, applicationId: string, kind: s
         link: `${baseUrl}${screeningPath(full.screenToken, f.slug)}`,
         alreadyFilledIn: done.has(f.id),
         questions: qs.length,
-        asksForFiles: qs.filter((q) => q.type === "file").map((q) => q.label),
+        asksForFiles: qs.filter((q) => q.type === "file" || q.type === "video").map((q) => q.label),
       };
     }),
     previous: full.messages,
     /** Scheduled interviews: the only times and people an interview invite may name. */
-    interviews: full.interviews,
+    interviews: full.interviews.map(({ bookToken, slots, ...i }) => ({
+      ...i,
+      /** Times offered for them to pick, when no time is fixed: send bookingLink and let them choose; don't list the times as fixed. */
+      offeredTimes: i.scheduledAt ? [] : slots,
+      bookingLink: bookToken && slots.length && !i.scheduledAt ? `${baseUrl}${bookingPath(bookToken)}` : null,
+    })),
     /** The latest offer version: the only terms an offer message may state. Null when none is recorded. */
     offer: full.offers[0]
       ? (({ userId: _u, applicationId: _a, ...o }) => ({ ...o, pay: formatOfferPay(o) }))(full.offers[0])

@@ -4,6 +4,7 @@ import { notFound, UserError } from "@/lib/data/errors";
 import { requireJob } from "@/lib/data/jobs";
 import { secret } from "@/lib/ids";
 import { styleLabel } from "@/lib/provenance";
+import { readProbes } from "@/lib/probes";
 
 /**
  * Candidates, applications, stages and notes. userId first everywhere.
@@ -210,6 +211,10 @@ export async function getApplication(userId: string, applicationId: string) {
     candidate: { id: a.candidate.id, name: a.candidate.name, email: a.candidate.email, phone: a.candidate.phone, links: a.candidate.links },
     screenToken: a.screenToken,
     provenance: rollup(answers),
+    /** Follow-up questions saved for this applicant, in order; index is what mark_probe takes. */
+    probes: readProbes(a.probes),
+    /** The read-only link, when it is on. */
+    sharePath: a.shareSlug ? `/s/${a.shareSlug}` : null,
     submissions: a.submissions.map((s) => ({
       id: s.id,
       form: s.form,

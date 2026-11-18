@@ -11,6 +11,11 @@ import * as connections from "@/lib/data/connections";
 import * as messages from "@/lib/data/messages";
 import * as imports from "@/lib/data/imports";
 import * as interviews from "@/lib/data/interviews";
+import * as probes from "@/lib/data/probes";
+import * as references from "@/lib/data/references";
+import * as share from "@/lib/data/share";
+import * as closeout from "@/lib/data/closeout";
+import * as sample from "@/lib/data/sample";
 import { updateAccount, userByLogin } from "@/lib/data/users";
 import { UserError } from "@/lib/data/errors";
 
@@ -84,13 +89,17 @@ export async function addNote(_: ActionState, form: FormData): Promise<ActionSta
 
 export async function saveAccount(_: ActionState, form: FormData): Promise<ActionState> {
   const user = await requireUser();
+  // Each settings card posts only its own fields; a field that isn't in the form is left alone.
+  const opt = (k: string) => (form.has(k) ? String(form.get(k) ?? "") : undefined);
   return attempt(
     () =>
       updateAccount(user.id, {
-        name: String(form.get("name") ?? ""),
-        companyName: String(form.get("companyName") ?? ""),
-        email: String(form.get("email") ?? ""),
-        password: String(form.get("password") ?? "") || undefined,
+        name: opt("name"),
+        companyName: opt("companyName"),
+        companyAbout: opt("companyAbout"),
+        companyWebsite: opt("companyWebsite"),
+        email: opt("email"),
+        password: opt("password") || undefined,
       }).then(() => revalidatePath("/settings")),
     "Saved.",
   );
@@ -250,4 +259,82 @@ export async function setOfferStatusAction(applicationId: string, offerId: strin
   const user = await requireUser();
   await interviews.setOfferStatus(user.id, offerId, status);
   revalidatePath(`/applications/${applicationId}`);
+}
+
+export async function toggleProbe(applicationId: string, index: number, asked: boolean) {
+  const user = await requireUser();
+  await probes.markProbe(user.id, applicationId, index, { asked });
+  revalidatePath(`/applications/${applicationId}`);
+}
+
+export async function requestReferenceAction(_: ActionState, form: FormData): Promise<ActionState> {
+  const user = await requireUser();
+  const id = String(form.get("applicationId") ?? "");
+  const r = await attempt(
+    () =>
+      references
+        .requestReference(user.id, id, { name: String(form.get("name") ?? ""), email: String(form.get("email") ?? ""), relation: String(form.get("relation") ?? "") })
+        .then(() => {}),
+    "Link ready. Copy it below and send it to them.",
+  );
+  revalidatePath(`/applications/${id}`);
+  return r;
+}
+
+export async function deleteReferenceAction(applicationId: string, referenceId: string) {
+  const user = await requireUser();
+  await references.deleteReference(user.id, referenceId);
+  revalidatePath(`/applications/${applicationId}`);
+}
+
+export async function shareApplicantAction(applicationId: string, shared: boolean) {
+  const user = await requireUser();
+  await share.shareApplicant(user.id, applicationId, shared);
+  revalidatePath(`/applications/${applicationId}`);
+}
+
+export async function offerTimesAction(_: ActionState, form: FormData): Promise<ActionState> {
+  const user = await requireUser();
+  const id = String(form.get("applicationId") ?? "");
+  const times = form.getAll("slot").map(String).filter(Boolean);
+  const r = await attempt(async () => {
+    if (!times.length) throw new UserError("Pick at least one time.");
+    await interviews.offerTimes(user.id, String(form.get("interviewId") ?? ""), times);
+  }, "Times offered. Send them the booking link.");
+  revalidatePath(`/applications/${id}`);
+  return r;
+}
+
+export async function closeOutAction(_: ActionState, form: FormData): Promise<ActionState> {
+  const user = await requireUser();
+  const jobId = String(form.get("jobId") ?? "");
+  let drafted = 0;
+  const r = await attempt(async () => {
+    const out = await closeout.closeOutJob(user.id, jobId, {
+      subject: String(form.get("subject") ?? ""),
+      body: String(form.get("body") ?? ""),
+      moveToRejected: form.get("moveToRejected") === "on",
+      closeJob: form.get("closeJob") === "on",
+      writtenBy: "app",
+    });
+    drafted = out.drafted ?? 0;
+  });
+  revalidatePath(`/jobs/${jobId}`);
+  return r ?? { ok: drafted ? `${drafted} draft${drafted === 1 ? "" : "s"} saved. Each is waiting on the applicant's page to send.` : "Everyone has already heard back." };
+}
+
+export async function loadSampleAction() {
+  const user = await requireUser();
+  const r = await attempt(() => sample.loadSampleWorkspace(user.id).then(() => {}));
+  if (r?.error) return;
+  revalidatePath("/jobs");
+  revalidatePath("/settings");
+}
+
+export async function wipeSampleAction() {
+  const user = await requireUser();
+  await sample.wipeSampleWorkspace(user.id);
+  revalidatePath("/jobs");
+  revalidatePath("/settings");
+  revalidatePath("/applications");
 }
