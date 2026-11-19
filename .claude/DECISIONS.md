@@ -224,3 +224,16 @@ the company profile and the sample workspace. Calls worth remembering:
   write that checks it, and a reset ends every session the account had.
 - When connected mail lands (roadmap item 11), the forgot form should email
   the link too; the log stays as the fallback for a self-hoster with no mail.
+
+## 2026-11-19 — Turnstile, and where settings live
+
+- Instance configuration goes in a `Setting` table (key, value), changed by
+  the owner from Settings or by tool, never by an environment variable. The
+  first use is Turnstile's two keys. Secrets are written and never read back
+  out to a page or a tool.
+- Turnstile guards the open apply page only. Screening, reference and booking
+  links are personal tokens, and asking a referee to solve a check is rude.
+- Turnstile fails open when Cloudflare is unreachable, like the rate limit:
+  someone else's outage shouldn't cost a real application.
+- The probe uses Cloudflare's published test keys (1x… always passes, 2x…
+  always fails), so CI checks the real siteverify call.

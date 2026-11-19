@@ -301,6 +301,27 @@ try {
     ok((await db.job.count({ where: { userId: b.id } })) === 0, "the wipe left a job behind");
   });
 
+  await check("only the owner turns the spam check on, the secret never comes back, and it guards the apply page", async () => {
+    await refuses(call("set_spam_check", b, { site_key: "1x00000000000000000000AA", secret_key: "1x0000000000000000000000000000000AA" }), /owner/);
+    await db.user.update({ where: { id: a.id }, data: { role: "OWNER" } });
+    const on = await call("set_spam_check", a, { site_key: "1x00000000000000000000AA", secret_key: "2x0000000000000000000000000000000AA" });
+    ok(on.on === true, "it didn't turn on");
+    ok(!JSON.stringify(on).includes("2x000"), "the secret came back");
+    ok(!JSON.stringify(await call("set_spam_check", b, {})).includes("2x000"), "the status shows the secret");
+    const before = await db.application.count({ where: { userId: a.id } });
+    const noToken = await post({ ...payload("Tok Probe", `tok-${stamp}@probe.invalid`, "Yes"), files: undefined }, "192.0.2.10");
+    ok(noToken.status === 400, `a post without a token got ${noToken.status}`);
+    const failing = await post({ ...payload("Tok Probe", `tok-${stamp}@probe.invalid`, "Yes"), files: undefined, turnstile: "XXXX.DUMMY.TOKEN.XXXX" }, "192.0.2.11");
+    ok(failing.status === 400, `a token Cloudflare rejects got ${failing.status}`);
+    await call("set_spam_check", a, { site_key: "1x00000000000000000000AA", secret_key: "1x0000000000000000000000000000000AA" });
+    const passing = await post({ ...payload("Tok Probe", `tok-${stamp}@probe.invalid`, "Yes"), files: undefined, turnstile: "XXXX.DUMMY.TOKEN.XXXX" }, "192.0.2.12");
+    ok(passing.status === 200, `a token Cloudflare accepts got ${passing.status}`);
+    ok((await db.application.count({ where: { userId: a.id } })) === before + 1, "the accepted post saved nothing");
+    const off = await call("set_spam_check", a, { site_key: "", secret_key: "" });
+    ok(off.on === false, "it didn't turn off");
+    await db.user.update({ where: { id: a.id }, data: { role: "MEMBER" } });
+  });
+
   await check("a reset link works once, for its own account, and signs every browser out", async () => {
     const got = await call("get_password_reset_link", b, {});
     ok(got.account === b.email, "the link is for another account");
@@ -430,6 +451,7 @@ try {
   failures.push(`setup: ${error instanceof Error ? error.stack : String(error)}`);
 } finally {
   await db.rateHit.deleteMany({});
+  await db.setting.deleteMany({ where: { key: { startsWith: "turnstile." } } });
   await db.user.deleteMany({ where: { id: { in: made } } });
   await db.$disconnect();
 }

@@ -1,7 +1,8 @@
 import { FormErrors, type PublicPayload } from "@/lib/data/public";
 import { UserError } from "@/lib/data/errors";
 import { MAX_TOTAL_BYTES } from "@/lib/files";
-import { overLimit, TOO_MANY, type Route } from "@/lib/data/ratelimit";
+import { clientAddress, overLimit, TOO_MANY, type Route } from "@/lib/data/ratelimit";
+import { NOT_CONFIRMED, passesTurnstile } from "@/lib/turnstile";
 
 /**
  * Read a public form post defensively and turn errors into JSON the form can
@@ -44,6 +45,8 @@ export async function handlePublicSubmit(request: Request, route: Route, target:
     return Response.json({ error: "The form didn't arrive in one piece. Try again." }, { status: 400 });
   }
   if (typeof raw.trap === "string" && raw.trap.trim()) return Response.json({ ok: true });
+  if (route === "apply" && !(await passesTurnstile(typeof raw.turnstile === "string" ? raw.turnstile.slice(0, 4096) : undefined, clientAddress(request))))
+    return Response.json({ error: NOT_CONFIRMED }, { status: 400 });
   const answers: Record<string, string> = {};
   if (raw.answers && typeof raw.answers === "object")
     for (const [k, v] of Object.entries(raw.answers as Record<string, unknown>)) if (typeof v === "string") answers[k] = v;

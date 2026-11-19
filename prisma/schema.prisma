@@ -554,3 +554,11 @@ model RateHit {
   @@id([key, window])
   @@index([window])
 }
+
+/// Instance settings, keyed by name, configured from the app and by tool so
+/// DATABASE_URL stays the only variable. Owner-only to change.
+model Setting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}

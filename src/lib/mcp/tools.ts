@@ -14,6 +14,7 @@ import * as brief from "@/lib/data/brief";
 import * as closeout from "@/lib/data/closeout";
 import * as sample from "@/lib/data/sample";
 import * as users from "@/lib/data/users";
+import * as settings from "@/lib/data/settings";
 import { UserError } from "@/lib/data/errors";
 import { BOARDS, BOARD_KEYS, boardByKey } from "@/lib/boards";
 import { QUESTION_TYPES } from "@/lib/forms";
@@ -942,6 +943,26 @@ export const TOOLS: McpTool[] = [
     handler: async (args, ctx) => {
       const u = await users.updateAccount(ctx.userId, { companyName: s(args, "company_name"), companyAbout: s(args, "about"), companyWebsite: s(args, "website") });
       return { companyName: u.companyName, about: u.companyAbout, website: u.companyWebsite };
+    },
+  },
+  {
+    name: "set_spam_check",
+    title: "Turn the apply page's spam check on or off",
+    description:
+      "Cloudflare Turnstile on the public apply pages: a small check above the send button that stops most bots, usually without the applicant doing anything. " +
+      "Every apply page already has a hidden trap field and a per-address hourly limit; reach for this when the person says spam or fake applications are still getting through, or asks for a captcha. " +
+      "It needs a free Cloudflare account: in the Cloudflare dashboard, Turnstile, add a widget for the domain the apply pages are on, then paste its site key and secret key here. Never invent keys; ask for them. " +
+      "Send both keys to turn it on, two empty strings to turn it off, or nothing to see whether it's on. Only the instance's owner can change it. The secret is stored and never shown again, here or in the app.",
+    inputSchema: object({
+      site_key: str("The widget's site key, from Cloudflare. Empty string turns the check off."),
+      secret_key: str("The widget's secret key, from Cloudflare. Empty string turns the check off."),
+    }),
+    annotations: SET,
+    handler: async (args, ctx) => {
+      const siteKey = s(args, "site_key");
+      const secretKey = s(args, "secret_key");
+      if (siteKey === undefined && secretKey === undefined) return settings.spamCheckStatus();
+      return settings.setTurnstile(ctx.userId, { siteKey: siteKey ?? "", secretKey: secretKey ?? "" });
     },
   },
   {

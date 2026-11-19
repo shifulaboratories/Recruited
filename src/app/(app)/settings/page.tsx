@@ -1,6 +1,7 @@
 import { baseUrl, requireUser } from "@/lib/auth";
 import { mcpPath, primaryConnection } from "@/lib/data/connections";
-import { loadSampleAction, rotateConnection, saveAccount, wipeSampleAction } from "@/server/actions";
+import { loadSampleAction, rotateConnection, saveAccount, setSpamCheck, wipeSampleAction } from "@/server/actions";
+import { spamCheckStatus } from "@/lib/data/settings";
 import { hasSample } from "@/lib/data/sample";
 import { ActionForm, CopyButton } from "@/components/forms";
 import { TOOLS } from "@/lib/mcp/tools";
@@ -12,6 +13,7 @@ export default async function SettingsPage() {
   const conn = await primaryConnection(user.id);
   const url = `${await baseUrl()}${mcpPath(conn.token)}`;
   const sample = await hasSample(user.id);
+  const spam = await spamCheckStatus();
   return (
     <div className="space-y-8 max-w-2xl">
       <header className="rise space-y-1.5">
@@ -79,6 +81,32 @@ export default async function SettingsPage() {
           </label>
         </ActionForm>
       </section>
+
+      {user.role === "OWNER" && (
+        <section className="card p-5">
+          <h2 className="h-section mb-1">Spam check</h2>
+          <p className="text-[12.5px] text-rt-muted mb-3">
+            Apply pages already have a hidden trap field and an hourly limit per address. If fake applications still get through, add a
+            Cloudflare Turnstile widget for your apply pages&apos; domain (free, in the Cloudflare dashboard under Turnstile) and paste its keys
+            here. {spam.on ? "It's on now." : "It's off now."}
+          </p>
+          <ActionForm action={setSpamCheck} submit={spam.on ? "Replace keys" : "Turn on"}>
+            <label className="block space-y-1">
+              <span className="text-rt-muted">Site key</span>
+              <input className="field" name="siteKey" defaultValue={spam.siteKey ?? ""} autoComplete="off" />
+            </label>
+            <label className="block space-y-1">
+              <span className="text-rt-muted">Secret key{spam.on ? " (saved; paste it again to change the keys)" : ""}</span>
+              <input className="field" name="secretKey" type="password" autoComplete="off" />
+            </label>
+          </ActionForm>
+          {spam.on && (
+            <ActionForm action={setSpamCheck} submit="Turn off" className="mt-3">
+              <input type="hidden" name="off" value="1" />
+            </ActionForm>
+          )}
+        </section>
+      )}
 
       <section className="card p-5 flex flex-wrap items-center gap-3">
         <div className="flex-1 min-w-[220px]">

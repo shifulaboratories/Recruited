@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Script from "next/script";
 import type { FormQuestion } from "@/lib/forms";
 import { FILE_TYPES, WRITTEN_TYPES } from "@/lib/forms";
 import { EMPTY_TELEMETRY, type FieldTelemetry } from "@/lib/provenance";
@@ -173,6 +174,7 @@ export function PublicForm({
   doneText,
   nextSteps,
   company,
+  turnstileSiteKey,
 }: {
   questions: FormQuestion[];
   endpoint: string;
@@ -183,6 +185,8 @@ export function PublicForm({
   /** What happens next, one step per line. Empty uses a default. */
   nextSteps?: string;
   company?: string;
+  /** Set when the owner turned on Cloudflare Turnstile; the widget then sits above the send button. */
+  turnstileSiteKey?: string | null;
 }) {
   const { bind, snapshot } = useRecorder();
   const startedAt = useRef(Date.now());
@@ -249,6 +253,7 @@ export function PublicForm({
       name: String(fd.get("name") ?? ""),
       email: String(fd.get("email") ?? ""),
       trap: String(fd.get("trap") ?? ""),
+      turnstile: String(fd.get("cf-turnstile-response") ?? ""),
       answers,
       telemetry: snapshot(answers),
       recorded: true,
@@ -272,6 +277,8 @@ export function PublicForm({
         setDone(true);
         window.scrollTo({ top: 0, behavior: "smooth" });
       } else {
+        // A Turnstile token works once; get a fresh one for the next try.
+        (window as unknown as { turnstile?: { reset: () => void } }).turnstile?.reset();
         setErrors(answer.fields ?? {});
         setMessage(answer.fields?._form ?? answer.error ?? "Something went wrong. Try again in a moment.");
         const first = Object.keys(answer.fields ?? {})[0];
@@ -430,6 +437,13 @@ export function PublicForm({
           </Field>
         );
       })}
+
+      {turnstileSiteKey && (
+        <>
+          <Script src="https://challenges.cloudflare.com/turnstile/v0/api.js" strategy="afterInteractive" />
+          <div className="cf-turnstile" data-sitekey={turnstileSiteKey} data-size="flexible" />
+        </>
+      )}
 
       <div className="flex flex-wrap items-center gap-3 pt-2">
         <button className="btn btn-primary h-10 px-5 text-[14px]" disabled={sending}>
