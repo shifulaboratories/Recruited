@@ -1,5 +1,8 @@
 import Link from "next/link";
-import { baseUrl, requireUser } from "@/lib/auth";
+import { notFound, redirect } from "next/navigation";
+import { baseUrl, requireSeat } from "@/lib/auth";
+import { reaches } from "@/lib/data/team";
+import { seesEverything } from "@/lib/team";
 import { formatPay, getJob } from "@/lib/data/jobs";
 import { applyPath, listingReport } from "@/lib/data/listings";
 import { listApplications, STAGES } from "@/lib/data/applications";
@@ -21,14 +24,18 @@ function sourceLabel(source: string) {
 
 export default async function JobPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const user = await requireUser();
-  const job = await getJob(user.id, id);
+  const { seat, userId } = await requireSeat();
+  if (seat.panelId) redirect("/interviews");
+  if (!(await reaches(seat, { jobId: id }))) notFound();
+  // Owners and recruiters run the job; a hiring manager sees it and moves applicants.
+  const full = seesEverything(seat.role);
+  const job = await getJob(userId, id);
   const base = await baseUrl();
-  const report = await listingReport(user.id, job.id);
-  const { applications } = await listApplications(user.id, { jobId: job.id, sort: "tier", limit: 500 });
+  const report = await listingReport(userId, job.id);
+  const { applications } = await listApplications(userId, { jobId: job.id, sort: "tier", limit: 500 });
   const byId = new Map(report.listings.map((r) => [r.listingId, r]));
   const filled = job.status === "CLOSED" || applications.some((a) => a.stage === "HIRED");
-  const loop = filled ? await closeOutJob(user.id, job.id, { dryRun: true }) : null;
+  const loop = filled && full ? await closeOutJob(userId, job.id, { dryRun: true }) : null;
   const pending = loop?.wouldDraft ?? 0;
 
   return (
@@ -43,7 +50,7 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
           title={job.title}
           sub={[job.team, job.location, job.workplace, formatPay(job)].filter(Boolean).join(" · ") || undefined}
           actions={
-            job.status !== "OPEN" ? (
+            !full ? undefined : job.status !== "OPEN" ? (
               <form action={setJobStatus.bind(null, job.id, "OPEN")}>
                 <button className="btn btn-primary">Open for applications</button>
               </form>
@@ -78,6 +85,7 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
             }))}
           />
         )}
+        {full && (
         <details className="mt-3 text-sm group">
           <summary className="btn btn-quiet text-xs cursor-pointer">Import applicants from a board export (CSV)</summary>
           <div className="card p-4 mt-2">
@@ -87,6 +95,7 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
             />
           </div>
         </details>
+        )}
       </section>
 
       {loop && pending > 0 && (
@@ -185,7 +194,7 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
                     <CopyButton text={paste.title} label="Copy title" />
                     <CopyButton text={paste.body} label={`Copy ${paste.format === "html" ? "HTML" : "text"} to paste`} />
                     <div className="flex-1" />
-                    {l.status !== "LIVE" ? (
+                    {!full ? null : l.status !== "LIVE" ? (
                       <form action={setListingStatus.bind(null, l.id, "LIVE")}>
                         <button className="btn text-xs">Mark live</button>
                       </form>

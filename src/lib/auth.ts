@@ -1,7 +1,9 @@
 import { randomBytes } from "node:crypto";
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
+import type { User } from "@prisma/client";
 import { db } from "@/lib/db";
+import { seatFor, type Seat } from "@/lib/data/team";
 
 export const SESSION_COOKIE = "recruited_session";
 const SESSION_DAYS = 30;
@@ -40,6 +42,19 @@ export async function requireUser() {
   const user = await currentUser();
   if (!user) redirect("/login");
   return user;
+}
+
+/**
+ * The signed-in person, the workspace they work in, and their seat in it. Pages
+ * and actions pass seat.userId (the workspace) to every data call, and the
+ * person's own id only to what is theirs: their account and their connection.
+ */
+export async function requireSeat(): Promise<{ person: User; workspace: User; seat: Seat; userId: string }> {
+  const person = await requireUser();
+  const seat = await seatFor(person);
+  const workspace = seat.userId === person.id ? person : await db.user.findUnique({ where: { id: seat.userId } });
+  if (!workspace) redirect("/login");
+  return { person, workspace, seat, userId: seat.userId };
 }
 
 /** Where this instance is reachable, from the request headers. */

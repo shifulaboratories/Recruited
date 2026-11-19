@@ -20,6 +20,9 @@
  *     and shows no tier, note, answer or contact detail;
  *   - an applicant's data comes out whole and is deleted whole, on request
  *     or when the retention period runs out, and hires are kept;
+ *   - a teammate joins by a one-time invite, works in the owner's workspace,
+ *     and their own connection lists and reaches only what their role does:
+ *     a hiring manager their jobs, an interviewer the interviews they're on;
  *   - the MCP transport lists every tool and renders every prompt.
  *
  * It REFUSES any database whose name does not contain "probe", because it
@@ -57,6 +60,9 @@ const usersData = await load("data/users.ts");
 const systemData = await load("data/system.ts");
 const mailboxData = await load("data/mailbox.ts");
 const privacyData = await load("data/privacy.ts");
+const teamData = await load("data/team.ts");
+const teamRules = await load("team.ts");
+const connectionsData = await load("data/connections.ts");
 
 const BASE = "http://probe.invalid";
 const called = new Set();
@@ -65,9 +71,22 @@ function tool(name) {
   if (!found) throw new Error(`no tool called ${name}`);
   return (user, args = {}) => {
     called.add(name);
-    return found.handler(args, { userId: user.id, user, baseUrl: BASE });
+    // The owner's own seat. Teammates go through rpc below, the path a real connection takes.
+    const seat = { userId: user.id, personId: user.id, role: "OWNER", jobIds: undefined, panelId: undefined };
+    return found.handler(args, { userId: user.id, user, person: user, seat, baseUrl: BASE });
   };
 }
+/** A JSON-RPC call through the transport, as the connection of `person`. */
+const rpc = async (person, body) => {
+  const res = await handleMcpPost(new Request(`${BASE}/api/mcp`, { method: "POST", body: JSON.stringify(body) }), person, BASE);
+  return res.json();
+};
+/** tools/call through the transport: what a teammate's assistant gets back. */
+const rpcCall = async (person, name, args = {}) => {
+  called.add(name);
+  const got = await rpc(person, { jsonrpc: "2.0", id: 9, method: "tools/call", params: { name, arguments: args } });
+  return { error: got.result?.isError ? got.result.content?.[0]?.text ?? "error" : null, data: got.result?.structuredContent, text: got.result?.content?.[0]?.text ?? "" };
+};
 const call = (name, user, args) => tool(name)(user, args);
 
 let passed = 0;
@@ -77,7 +96,7 @@ async function check(name, fn) {
     await fn();
     passed += 1;
   } catch (error) {
-    failures.push(`${name}: ${error instanceof Error ? error.message : String(error)}`);
+    failures.push(`${name}: ${error instanceof Error ? error.message : String(error)}${process.env.PROBE_STACK ? error?.stack : ""}`);
   }
 }
 function ok(condition, message) {
@@ -625,6 +644,115 @@ try {
     ok((await db.application.findUnique({ where: { id: app } })).stage !== "REJECTED", "close-out rejected someone with an offer");
   });
 
+  // --- Teams -------------------------------------------------------------------
+  // Teammates are real accounts made through invites, and every call they make
+  // goes through the transport, where the role is enforced.
+  const join = async (role, extra = {}) => {
+    const inv = await call("invite_teammate", a, { email: `${role.toLowerCase()}-${stamp}@probe.invalid`, name: `Probe ${role}`, role, ...extra });
+    const token = inv.link.split("/join/")[1];
+    const { userId } = await teamData.acceptInvite(token, { name: `Probe ${role}`, password: "a-long-password" });
+    made.push(userId);
+    return { person: await db.user.findUnique({ where: { id: userId } }), token };
+  };
+  const job2 = await call("create_job", a, { title: "Probe Second Job", status: "OPEN" });
+  const app2 = (await call("add_applicant", a, { job_id: job2.id, name: "Eve Probe", email: `eve-${stamp}@probe.invalid` })).applicationId;
+  let rec = null;
+  let hm = null;
+  let iv = null;
+
+  await check("an invite works once, for a new address, and seats the teammate in the owner's workspace", async () => {
+    await refuses(call("invite_teammate", a, { email: a.email, role: "RECRUITER" }), /already has an account/);
+    await refuses(call("invite_teammate", a, { email: `x-${stamp}@probe.invalid`, role: "HIRING_MANAGER" }), /at least one/);
+    await refuses(call("invite_teammate", a, { email: `x-${stamp}@probe.invalid`, role: "OWNER" }), /one owner/);
+    const joined = await join("RECRUITER");
+    rec = joined.person;
+    await refuses(teamData.acceptInvite(joined.token, { name: "Again", password: "a-long-password" }), /expired or was already used/);
+    const seat = await teamData.seatFor(rec);
+    ok(seat.userId === a.id && seat.role === "RECRUITER" && seat.personId === rec.id, "the recruiter isn't seated in A's workspace");
+    const team = await call("list_team", a, {});
+    ok(team.members.some((m) => m.id === rec.id && m.role === "RECRUITER"), "list_team doesn't show the recruiter");
+    ok(!/passwordHash|tokenHash/.test(JSON.stringify(team)), "list_team leaks a secret");
+  });
+
+  await check("a recruiter's own connection reaches the whole workspace, but not the team or the company settings", async () => {
+    const conn = await connectionsData.createConnection(rec.id);
+    const found = await connectionsData.userByConnectionToken(conn.token);
+    ok(found.user.id === rec.id, "the recruiter's token resolves to someone else");
+    const listed = (await rpc(found.user, { jsonrpc: "2.0", id: 1, method: "tools/list" })).result.tools.map((t) => t.name);
+    ok(listed.includes("send_message") && !listed.includes("invite_teammate") && !listed.includes("update_company"), "the recruiter's tools/list is wrong");
+    const jobs = await rpcCall(rec, "list_jobs");
+    ok(!jobs.error && jobs.data.items.some((j) => j.id === job.id), "the recruiter can't see A's jobs");
+    ok((await rpcCall(rec, "update_company", { company_name: "Taken" })).error, "a recruiter changed the company");
+    ok((await rpcCall(rec, "invite_teammate", { email: `y-${stamp}@probe.invalid`, role: "RECRUITER" })).error, "a recruiter invited someone");
+    const reset = await rpcCall(rec, "get_password_reset_link");
+    ok(reset.data?.account === rec.email, "the reset link is for someone other than the recruiter");
+  });
+
+  await check("a hiring manager lists, reads and moves only the jobs they were given", async () => {
+    hm = (await join("HIRING_MANAGER", { job_ids: [job2.id] })).person;
+    const listed = (await rpc(hm, { jsonrpc: "2.0", id: 1, method: "tools/list" })).result.tools.map((t) => t.name);
+    ok(listed.length === teamRules.SCOPED_TOOLS.HIRING_MANAGER.length, `a hiring manager sees ${listed.length} tools`);
+    const prompts = (await rpc(hm, { jsonrpc: "2.0", id: 1, method: "prompts/list" })).result.prompts;
+    ok(prompts.length === 0, "a hiring manager sees prompts built on tools they don't have");
+    const jobs = (await rpcCall(hm, "list_jobs")).data.items;
+    ok(jobs.length === 1 && jobs[0].id === job2.id, "list_jobs shows a job they weren't given");
+    const listedApps = await rpcCall(hm, "list_applications");
+    ok(!listedApps.error, `list_applications failed: ${listedApps.error}`);
+    const apps = listedApps.data.applications;
+    ok(apps.length === 1 && apps[0].id === app2, "list_applications shows another job's applicants");
+    ok((await rpcCall(hm, "list_applications", { job_id: job.id })).error, "filtering by another job was allowed");
+    ok(/access/.test((await rpcCall(hm, "get_application", { application_id: app })).error ?? ""), "they read an applicant on another job");
+    ok((await rpcCall(hm, "get_job", { job_id: job.id })).error, "they read another job");
+    ok((await rpcCall(hm, "read_upload", { upload_id: (await db.upload.findFirst({ where: { userId: a.id } })).id })).error, "they opened a file on another job");
+    ok((await rpcCall(hm, "move_stage", { application_id: app, stage: "REJECTED" })).error, "they moved an applicant on another job");
+    ok(/isn't available/.test((await rpcCall(hm, "prep_message", { application_id: app2, kind: "OTHER" })).error ?? ""), "they reached a messaging tool");
+    ok(!(await rpcCall(hm, "get_application", { application_id: app2 })).error, "they can't read their own job's applicant");
+    ok(!(await rpcCall(hm, "move_stage", { application_id: app2, stage: "SCREEN" })).error, "they can't move their own job's applicant");
+  });
+
+  await check("an interviewer sees only interviews they're on, no one's verdict, and writes only their own card", async () => {
+    iv = (await join("INTERVIEWER")).person;
+    await refuses(call("schedule_interview", a, { application_id: app2, title: "Panel", member_ids: [b.id] }), /isn't on this workspace's team/);
+    const round = await call("schedule_interview", a, { application_id: app2, title: "Panel with the team", member_ids: [iv.id, hm.id] });
+    await call("record_scorecard", a, { interview_id: round.id, interviewer: "Probe Lead", recommendation: "STRONG_NO", summary: "hidden-verdict-probe" });
+    await call("set_tier", a, { application_id: app2, tier: "A" });
+    await call("add_note", a, { application_id: app2, body: "hidden-note-probe" });
+    const mine = (await rpcCall(iv, "list_interviews")).data.items;
+    ok(mine.length === 1 && mine[0].id === round.id, `list_interviews shows ${mine.length} interviews`);
+    const seen = await rpcCall(iv, "get_application", { application_id: app2 });
+    ok(!seen.error, `they can't read the applicant: ${seen.error}`);
+    ok(!/hidden-verdict-probe|hidden-note-probe|eve-.*@probe\.invalid|"tier"/.test(seen.text), "the interviewer sees a verdict, a note, a tier or the email");
+    ok((await rpcCall(iv, "get_application", { application_id: app })).error, "they read an applicant they aren't interviewing");
+    const other = await db.interview.findFirst({ where: { userId: a.id, NOT: { id: round.id } } });
+    ok((await rpcCall(iv, "record_scorecard", { interview_id: other.id, interviewer: "x", recommendation: "YES" })).error, "they scored an interview they aren't on");
+    const card = await rpcCall(iv, "record_scorecard", { interview_id: round.id, interviewer: "Someone Else", recommendation: "YES", summary: "Clear thinker." });
+    ok(!card.error, `their own card was refused: ${card.error}`);
+    ok((await db.scorecard.findUnique({ where: { id: card.data.id } })).interviewer === "Probe INTERVIEWER", "the card went in under another name");
+    ok((await rpcCall(iv, "list_jobs")).error, "an interviewer reached list_jobs");
+  });
+
+  await check("the owner changes a role, withdraws an invite and removes a teammate, whose connection then stops", async () => {
+    const changed = await call("update_teammate", a, { teammate_id: hm.id, role: "RECRUITER" });
+    ok(changed.role === "RECRUITER" && changed.jobIds.length === 0, "the role didn't change");
+    ok((await rpcCall(hm, "list_jobs")).data.items.length >= 2, "a promoted teammate still sees only one job");
+    await refuses(call("update_teammate", a, { teammate_id: a.id, remove: true }), /owner/);
+    const inv = await call("invite_teammate", a, { email: `later-${stamp}@probe.invalid`, role: "INTERVIEWER" });
+    const open = (await call("list_team", a, {})).invites.find((i) => i.email === `later-${stamp}@probe.invalid`);
+    await call("update_teammate", a, { invite_id: open.id });
+    ok(!(await teamData.inviteByToken(inv.link.split("/join/")[1])), "a withdrawn invite still opens");
+    const conn = await connectionsData.createConnection(iv.id);
+    await call("update_teammate", a, { teammate_id: iv.id, remove: true });
+    ok(!(await db.user.findUnique({ where: { id: iv.id } })), "the removed teammate's account is still there");
+    ok(!(await connectionsData.userByConnectionToken(conn.token)), "the removed teammate's connection still works");
+  });
+
+  await check("every tool a role list names exists", async () => {
+    const names = new Set(TOOLS.map((t) => t.name));
+    const named = [...teamRules.OWNER_TOOLS, ...teamRules.SCOPED_TOOLS.HIRING_MANAGER, ...teamRules.SCOPED_TOOLS.INTERVIEWER];
+    const unknown = named.filter((n) => !names.has(n));
+    ok(!unknown.length, `src/lib/team.ts names tools that don't exist: ${unknown.join(", ")}`);
+  });
+
   await check("every tool has a case in this probe", async () => {
     const missing = TOOLS.map((t) => t.name).filter((n) => !called.has(n));
     ok(!missing.length, `no case for ${missing.join(", ")}`);
@@ -675,6 +803,8 @@ try {
     ["request_reference", { application_id: ids.application_id, name: "Spy" }],
     ["close_out_job", { job_id: ids.job_id, dry_run: true }],
     ["share_applicant", { application_id: ids.application_id, shared: true }],
+    ["update_teammate", { teammate_id: rec.id, role: "INTERVIEWER" }],
+    ["update_teammate", { teammate_id: rec.id, remove: true }],
   ];
   for (const [name, args] of crossings) {
     await check(`${name} refuses another workspace's ${Object.keys(args)[0]}`, () => refuses(call(name, b, args)));
@@ -697,16 +827,12 @@ try {
     await jobsData.archiveJob(a.id, job.id);
     ok(!(await call("list_jobs", a, {})).some((j) => j.id === job.id), "list_jobs shows it");
     await refuses(call("get_job", a, { job_id: job.id }));
-    ok((await call("list_applications", a, {})).applications.length === 0, "its applications still list");
-    ok((await call("list_interviews", a, {})).length === 0, "its interviews still list");
+    ok(!(await call("list_applications", a, {})).applications.some((r) => r.jobId === job.id), "its applications still list");
+    ok(!(await call("list_interviews", a, {})).some((i) => i.job.id === job.id), "its interviews still list");
     ok(!(await publicData.publicListing(slug)), "the apply page still opens");
   });
 
   // --- The transport -------------------------------------------------------------
-  const rpc = async (user, body) => {
-    const res = await handleMcpPost(new Request(`${BASE}/api/mcp`, { method: "POST", body: JSON.stringify(body) }), user, BASE);
-    return res.json();
-  };
   await check("tools/list returns every tool, and prompts/get renders every prompt", async () => {
     const init = await rpc(a, { jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "probe", version: "1" } } });
     ok(init.result?.serverInfo, "initialize returned no serverInfo");

@@ -7,15 +7,16 @@ import { Icon, type IconName } from "@/components/ui";
 const ITEMS: { href: string; label: string; icon: IconName }[] = [
   { href: "/jobs", label: "Jobs", icon: "jobs" },
   { href: "/applications", label: "Applicants", icon: "people" },
+  { href: "/interviews", label: "Your interviews", icon: "calendar" },
   { href: "/settings", label: "Connect Claude", icon: "plug" },
 ];
 
-/** The app's three places. The current one is lit; that's the only state here. */
-export function Nav({ counts }: { counts: Partial<Record<string, number>> }) {
+/** The app's places, the ones this role gets. The current one is lit; that's the only state here. */
+export function Nav({ counts, only }: { counts: Partial<Record<string, number>>; only: string[] }) {
   const path = usePathname();
   return (
     <nav className="flex md:flex-col gap-0.5" aria-label="Main">
-      {ITEMS.map((it) => {
+      {ITEMS.filter((it) => only.includes(it.href)).map((it) => {
         const on = path === it.href || path.startsWith(it.href + "/");
         return (
           <Link

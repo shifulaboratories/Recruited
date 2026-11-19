@@ -3,7 +3,7 @@
 import type { JobStatus, ListingStatus, Stage, Tier } from "@prisma/client";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { baseUrl, createSession, destroySession, requireUser } from "@/lib/auth";
+import { baseUrl, createSession, destroySession, requireSeat } from "@/lib/auth";
 import { headers } from "next/headers";
 import * as jobs from "@/lib/data/jobs";
 import * as listings from "@/lib/data/listings";
@@ -21,6 +21,7 @@ import * as closeout from "@/lib/data/closeout";
 import * as sample from "@/lib/data/sample";
 import * as users from "@/lib/data/users";
 import * as settings from "@/lib/data/settings";
+import * as team from "@/lib/data/team";
 import { updateAccount, userByLogin } from "@/lib/data/users";
 import { overLimit } from "@/lib/data/ratelimit";
 import { UserError } from "@/lib/data/errors";
@@ -32,6 +33,20 @@ import { UserError } from "@/lib/data/errors";
  */
 
 export type ActionState = { error?: string; ok?: string } | undefined;
+
+/**
+ * The signed-in person's seat, after checking it may do this: owner-only,
+ * owners and recruiters only, or reaching the given application, interview or
+ * job. A refusal is a UserError; the screens hide what a role can't do, so one
+ * only reaches someone who went around them.
+ */
+async function seated(check: { owner?: true; full?: true; applicationId?: string; interviewId?: string; jobId?: string } = {}) {
+  const s = await requireSeat();
+  if (check.owner) team.requireOwner(s.seat);
+  if (check.full) team.requireFull(s.seat);
+  await team.reach(s.seat, { applicationId: check.applicationId, interviewId: check.interviewId, jobId: check.jobId });
+  return s;
+}
 
 async function attempt(fn: () => Promise<void>, okMessage?: string): Promise<ActionState> {
   try {
@@ -81,10 +96,10 @@ export async function resetPassword(_: ActionState, form: FormData): Promise<Act
 }
 
 export async function setSpamCheck(_: ActionState, form: FormData): Promise<ActionState> {
-  const user = await requireUser();
+  const { userId } = await seated({ owner: true });
   const off = form.get("off") === "1";
   const r = await attempt(async () => {
-    await settings.setTurnstile(user.id, off ? { siteKey: "", secretKey: "" } : { siteKey: String(form.get("siteKey") ?? ""), secretKey: String(form.get("secretKey") ?? "") });
+    await settings.setTurnstile(userId, off ? { siteKey: "", secretKey: "" } : { siteKey: String(form.get("siteKey") ?? ""), secretKey: String(form.get("secretKey") ?? "") });
   }, off ? "Turned off." : "Turned on. Open an apply page to see the check.");
   revalidatePath("/settings");
   return r;
@@ -96,10 +111,10 @@ export async function logout() {
 }
 
 export async function createJob(_: ActionState, form: FormData): Promise<ActionState> {
-  const user = await requireUser();
+  const { userId } = await seated({ full: true });
   let id = "";
   const r = await attempt(async () => {
-    const j = await jobs.createJob(user.id, { title: String(form.get("title") ?? ""), description: String(form.get("description") ?? "") });
+    const j = await jobs.createJob(userId, { title: String(form.get("title") ?? ""), description: String(form.get("description") ?? "") });
     id = j.id;
   });
   if (r?.error) return r;
@@ -107,87 +122,88 @@ export async function createJob(_: ActionState, form: FormData): Promise<ActionS
 }
 
 export async function setJobStatus(jobId: string, status: JobStatus) {
-  const user = await requireUser();
-  await jobs.updateJob(user.id, jobId, { status });
+  const { userId } = await seated({ full: true });
+  await jobs.updateJob(userId, jobId, { status });
   revalidatePath(`/jobs/${jobId}`);
 }
 
 export async function setListingStatus(listingId: string, status: ListingStatus) {
-  const user = await requireUser();
-  const l = await listings.updateListing(user.id, listingId, { status });
+  const { userId } = await seated({ full: true });
+  const l = await listings.updateListing(userId, listingId, { status });
   revalidatePath(`/jobs/${l.jobId}`);
 }
 
 export async function moveStage(applicationId: string, stage: Stage) {
-  const user = await requireUser();
-  const a = await applications.moveStage(user.id, applicationId, stage);
+  const { userId } = await seated({ applicationId });
+  const a = await applications.moveStage(userId, applicationId, stage);
   revalidatePath(`/applications/${applicationId}`);
   revalidatePath(`/jobs/${a.jobId}`);
 }
 
 export async function addNote(_: ActionState, form: FormData): Promise<ActionState> {
-  const user = await requireUser();
   const id = String(form.get("applicationId") ?? "");
-  const r = await attempt(() => applications.addNote(user.id, id, String(form.get("body") ?? ""), "app").then(() => {}));
+  const r = await attempt(async () => {
+    const { userId } = await seated({ applicationId: id });
+    await applications.addNote(userId, id, String(form.get("body") ?? ""), "app");
+  });
   revalidatePath(`/applications/${id}`);
   return r;
 }
 
 export async function saveAccount(_: ActionState, form: FormData): Promise<ActionState> {
-  const user = await requireUser();
+  const { person, seat, userId } = await requireSeat();
   // Each settings card posts only its own fields; a field that isn't in the form is left alone.
   const opt = (k: string) => (form.has(k) ? String(form.get(k) ?? "") : undefined);
-  return attempt(
-    () =>
-      updateAccount(user.id, {
-        name: opt("name"),
+  const company = ["companyName", "companyAbout", "companyWebsite", "careersSlug", "retentionMonths", "privacyEmail"].some((k) => form.has(k));
+  return attempt(async () => {
+    // Your own account: name, email, password.
+    await updateAccount(person.id, { name: opt("name"), email: opt("email"), password: opt("password") || undefined });
+    if (company) {
+      // The workspace's company profile and privacy settings: the owner's.
+      team.requireOwner(seat);
+      await updateAccount(userId, {
         companyName: opt("companyName"),
         companyAbout: opt("companyAbout"),
         companyWebsite: opt("companyWebsite"),
         careersSlug: opt("careersSlug"),
-        email: opt("email"),
-        password: opt("password") || undefined,
-      })
-        .then(() =>
-          form.has("retentionMonths") || form.has("privacyEmail")
-            ? privacy.setRetention(user.id, {
-                months: form.has("retentionMonths") ? Number(form.get("retentionMonths")) : undefined,
-                privacyEmail: opt("privacyEmail"),
-              })
-            : null,
-        )
-        .then(() => revalidatePath("/settings")),
-    "Saved.",
-  );
+      });
+      if (form.has("retentionMonths") || form.has("privacyEmail"))
+        await privacy.setRetention(userId, {
+          months: form.has("retentionMonths") ? Number(form.get("retentionMonths")) : undefined,
+          privacyEmail: opt("privacyEmail"),
+        });
+    }
+    revalidatePath("/settings");
+  }, "Saved.");
 }
 
 export async function rotateConnection(connectionId: string) {
-  const user = await requireUser();
-  await connections.rotateConnection(user.id, connectionId);
+  const { person } = await requireSeat();
+  await connections.rotateConnection(person.id, connectionId);
   revalidatePath("/settings");
 }
 
 export async function setTier(applicationId: string, tier: Tier | null) {
-  const user = await requireUser();
-  const a = await applications.setTier(user.id, applicationId, tier, "", "app");
+  const { userId } = await seated({ applicationId });
+  const a = await applications.setTier(userId, applicationId, tier, "", "app");
   revalidatePath(`/applications/${applicationId}`);
   revalidatePath(`/jobs/${a.jobId}`);
 }
 
 export async function acceptProposal(applicationId: string) {
-  const user = await requireUser();
-  const a = await applications.acceptProposal(user.id, applicationId);
+  const { userId } = await seated({ applicationId });
+  const a = await applications.acceptProposal(userId, applicationId);
   revalidatePath(`/applications/${applicationId}`);
   revalidatePath(`/jobs/${a.jobId}`);
 }
 
 export async function saveMessageDraft(_: ActionState, form: FormData): Promise<ActionState> {
-  const user = await requireUser();
+  const { userId } = await seated({ full: true });
   const id = String(form.get("applicationId") ?? "");
   const r = await attempt(
     () =>
       messages
-        .saveMessage(user.id, {
+        .saveMessage(userId, {
           applicationId: id,
           kind: String(form.get("kind") ?? "OTHER"),
           subject: String(form.get("subject") ?? ""),
@@ -202,27 +218,27 @@ export async function saveMessageDraft(_: ActionState, form: FormData): Promise<
 }
 
 export async function markMessageSent(messageId: string) {
-  const user = await requireUser();
-  const m = await messages.updateMessage(user.id, messageId, { status: "SENT" });
+  const { userId } = await seated({ full: true });
+  const m = await messages.updateMessage(userId, messageId, { status: "SENT" });
   revalidatePath(`/applications/${m.applicationId}`);
 }
 
 /** The Send button on a draft. The click is the person's yes. */
 export async function sendMessageAction(_: ActionState, form: FormData): Promise<ActionState> {
-  const user = await requireUser();
+  const { userId } = await seated({ full: true });
   const id = String(form.get("messageId") ?? "");
-  const r = await attempt(() => mailbox.sendMessage(user.id, id).then(() => {}), "Sent.");
+  const r = await attempt(() => mailbox.sendMessage(userId, id).then(() => {}), "Sent.");
   revalidatePath(`/applications/${String(form.get("applicationId") ?? "")}`);
   return r;
 }
 
 export async function connectMailboxAction(_: ActionState, form: FormData): Promise<ActionState> {
-  const user = await requireUser();
+  const { userId } = await seated({ owner: true });
   const siteUrl = await baseUrl();
   const r = await attempt(
     () =>
       mailbox
-        .connectMailbox(user.id, {
+        .connectMailbox(userId, {
           host: String(form.get("host") ?? ""),
           port: Number(form.get("port")) || undefined,
           security: String(form.get("security") ?? "starttls"),
@@ -241,31 +257,31 @@ export async function connectMailboxAction(_: ActionState, form: FormData): Prom
 
 /** Delete everything about one applicant. The typed name is the confirmation. */
 export async function deleteApplicantAction(_: ActionState, form: FormData): Promise<ActionState> {
-  const user = await requireUser();
+  const { userId } = await seated({ owner: true });
   const id = String(form.get("applicationId") ?? "");
   const r = await attempt(async () => {
-    const preview = await privacy.deleteApplicantData(user.id, { applicationId: id }, true);
+    const preview = await privacy.deleteApplicantData(userId, { applicationId: id }, true);
     if (!preview.wouldDelete || String(form.get("confirm") ?? "").trim().toLowerCase() !== preview.wouldDelete.name.trim().toLowerCase())
       throw new UserError("Type their name exactly as shown to confirm.");
-    await privacy.deleteApplicantData(user.id, { applicationId: id }, false);
+    await privacy.deleteApplicantData(userId, { applicationId: id }, false);
   });
   if (r?.error) return r;
   redirect("/applications");
 }
 
 export async function disconnectMailboxAction() {
-  const user = await requireUser();
-  await mailbox.disconnectMailbox(user.id);
+  const { userId } = await seated({ owner: true });
+  await mailbox.disconnectMailbox(userId);
   revalidatePath("/settings");
 }
 
 export async function saveReceiptAction(_: ActionState, form: FormData): Promise<ActionState> {
-  const user = await requireUser();
+  const { userId } = await seated({ owner: true });
   const siteUrl = await baseUrl();
   const r = await attempt(
     () =>
       mailbox
-        .setReceipt(user.id, { on: form.get("on") === "on", subject: String(form.get("subject") ?? ""), body: String(form.get("body") ?? ""), siteUrl })
+        .setReceipt(userId, { on: form.get("on") === "on", subject: String(form.get("subject") ?? ""), body: String(form.get("body") ?? ""), siteUrl })
         .then(() => {}),
     "Saved.",
   );
@@ -274,8 +290,8 @@ export async function saveReceiptAction(_: ActionState, form: FormData): Promise
 }
 
 export async function deleteMessageDraft(applicationId: string, messageId: string) {
-  const user = await requireUser();
-  await messages.deleteDraft(user.id, messageId);
+  const { userId } = await seated({ full: true });
+  await messages.deleteDraft(userId, messageId);
   revalidatePath(`/applications/${applicationId}`);
 }
 
@@ -288,9 +304,9 @@ export async function importApplicantsAction(input: {
   listingId?: string;
   dryRun: boolean;
 }): Promise<{ error?: string; result?: ImportResult }> {
-  const user = await requireUser();
+  const { userId } = await seated({ full: true });
   try {
-    const result = await imports.importApplicants(user.id, {
+    const result = await imports.importApplicants(userId, {
       jobId: input.jobId,
       csv: input.csv,
       listingId: input.listingId || undefined,
@@ -311,18 +327,19 @@ const field = (form: FormData, k: string) => {
 };
 
 export async function addInterviewAction(_: ActionState, form: FormData): Promise<ActionState> {
-  const user = await requireUser();
   const id = String(form.get("applicationId") ?? "");
+  const { userId } = await seated({ applicationId: id });
   const r = await attempt(
     () =>
       interviews
-        .addInterview(user.id, id, {
+        .addInterview(userId, id, {
           title: field(form, "title"),
           format: field(form, "format"),
           scheduledAt: field(form, "scheduledAt"),
           durationMin: field(form, "durationMin") ? Number(field(form, "durationMin")) : undefined,
           interviewers: field(form, "interviewers"),
           location: field(form, "location"),
+          memberIds: form.has("memberId") ? form.getAll("memberId").map(String) : undefined,
         })
         .then(() => {}),
   );
@@ -331,16 +348,17 @@ export async function addInterviewAction(_: ActionState, form: FormData): Promis
 }
 
 export async function setInterviewStatus(applicationId: string, interviewId: string, status: string) {
-  const user = await requireUser();
-  await interviews.updateInterview(user.id, interviewId, { status });
+  const { userId } = await seated({ interviewId });
+  await interviews.updateInterview(userId, interviewId, { status });
   revalidatePath(`/applications/${applicationId}`);
 }
 
 /** Make an interviewer's scorecard link; the message carries the link to copy. */
 export async function scorecardLinkAction(_: ActionState, form: FormData): Promise<ActionState> {
-  const user = await requireUser();
   try {
-    const l = await interviews.scorecardLink(user.id, String(form.get("interviewId") ?? ""), String(form.get("interviewer") ?? ""));
+    const interviewId = String(form.get("interviewId") ?? "");
+    const { userId } = await seated({ interviewId });
+    const l = await interviews.scorecardLink(userId, interviewId, String(form.get("interviewer") ?? ""));
     return { ok: `${await baseUrl()}${l.path}` };
   } catch (e) {
     if (e instanceof UserError) return { error: e.message };
@@ -349,13 +367,14 @@ export async function scorecardLinkAction(_: ActionState, form: FormData): Promi
 }
 
 export async function addScorecardAction(_: ActionState, form: FormData): Promise<ActionState> {
-  const user = await requireUser();
   const appId = String(form.get("applicationId") ?? "");
+  const interviewId = String(form.get("interviewId") ?? "");
+  const { userId, seat, person } = await seated({ interviewId });
   const r = await attempt(
     () =>
       interviews
-        .addScorecard(user.id, String(form.get("interviewId") ?? ""), {
-          interviewer: String(form.get("interviewer") ?? ""),
+        .addScorecard(userId, interviewId, {
+          interviewer: seat.panelId ? person.name || person.email : String(form.get("interviewer") ?? ""),
           recommendation: String(form.get("recommendation") ?? ""),
           summary: field(form, "summary"),
           writtenBy: "app",
@@ -367,12 +386,12 @@ export async function addScorecardAction(_: ActionState, form: FormData): Promis
 }
 
 export async function recordOfferAction(_: ActionState, form: FormData): Promise<ActionState> {
-  const user = await requireUser();
+  const { userId } = await seated({ full: true });
   const id = String(form.get("applicationId") ?? "");
   const r = await attempt(
     () =>
       interviews
-        .recordOffer(user.id, id, {
+        .recordOffer(userId, id, {
           title: field(form, "title"),
           payAmount: field(form, "payAmount") ? Number(String(field(form, "payAmount")).replace(/[^0-9]/g, "")) : undefined,
           payCurrency: field(form, "payCurrency"),
@@ -390,24 +409,24 @@ export async function recordOfferAction(_: ActionState, form: FormData): Promise
 }
 
 export async function setOfferStatusAction(applicationId: string, offerId: string, status: string) {
-  const user = await requireUser();
-  await interviews.setOfferStatus(user.id, offerId, status);
+  const { userId } = await seated({ full: true });
+  await interviews.setOfferStatus(userId, offerId, status);
   revalidatePath(`/applications/${applicationId}`);
 }
 
 export async function toggleProbe(applicationId: string, index: number, asked: boolean) {
-  const user = await requireUser();
-  await probes.markProbe(user.id, applicationId, index, { asked });
+  const { userId } = await seated({ applicationId });
+  await probes.markProbe(userId, applicationId, index, { asked });
   revalidatePath(`/applications/${applicationId}`);
 }
 
 export async function requestReferenceAction(_: ActionState, form: FormData): Promise<ActionState> {
-  const user = await requireUser();
+  const { userId } = await seated({ full: true });
   const id = String(form.get("applicationId") ?? "");
   const r = await attempt(
     () =>
       references
-        .requestReference(user.id, id, { name: String(form.get("name") ?? ""), email: String(form.get("email") ?? ""), relation: String(form.get("relation") ?? "") })
+        .requestReference(userId, id, { name: String(form.get("name") ?? ""), email: String(form.get("email") ?? ""), relation: String(form.get("relation") ?? "") })
         .then(() => {}),
     "Link ready. Copy it below and send it to them.",
   );
@@ -416,35 +435,36 @@ export async function requestReferenceAction(_: ActionState, form: FormData): Pr
 }
 
 export async function deleteReferenceAction(applicationId: string, referenceId: string) {
-  const user = await requireUser();
-  await references.deleteReference(user.id, referenceId);
+  const { userId } = await seated({ full: true });
+  await references.deleteReference(userId, referenceId);
   revalidatePath(`/applications/${applicationId}`);
 }
 
 export async function shareApplicantAction(applicationId: string, shared: boolean) {
-  const user = await requireUser();
-  await share.shareApplicant(user.id, applicationId, shared);
+  const { userId } = await seated({ full: true });
+  await share.shareApplicant(userId, applicationId, shared);
   revalidatePath(`/applications/${applicationId}`);
 }
 
 export async function offerTimesAction(_: ActionState, form: FormData): Promise<ActionState> {
-  const user = await requireUser();
   const id = String(form.get("applicationId") ?? "");
   const times = form.getAll("slot").map(String).filter(Boolean);
   const r = await attempt(async () => {
     if (!times.length) throw new UserError("Pick at least one time.");
-    await interviews.offerTimes(user.id, String(form.get("interviewId") ?? ""), times);
+    const interviewId = String(form.get("interviewId") ?? "");
+    const { userId } = await seated({ interviewId });
+    await interviews.offerTimes(userId, interviewId, times);
   }, "Times offered. Send them the booking link.");
   revalidatePath(`/applications/${id}`);
   return r;
 }
 
 export async function closeOutAction(_: ActionState, form: FormData): Promise<ActionState> {
-  const user = await requireUser();
+  const { userId } = await seated({ full: true });
   const jobId = String(form.get("jobId") ?? "");
   let drafted = 0;
   const r = await attempt(async () => {
-    const out = await closeout.closeOutJob(user.id, jobId, {
+    const out = await closeout.closeOutJob(userId, jobId, {
       subject: String(form.get("subject") ?? ""),
       body: String(form.get("body") ?? ""),
       moveToRejected: form.get("moveToRejected") === "on",
@@ -458,17 +478,81 @@ export async function closeOutAction(_: ActionState, form: FormData): Promise<Ac
 }
 
 export async function loadSampleAction() {
-  const user = await requireUser();
-  const r = await attempt(() => sample.loadSampleWorkspace(user.id).then(() => {}));
+  const { userId } = await seated({ owner: true });
+  const r = await attempt(() => sample.loadSampleWorkspace(userId).then(() => {}));
   if (r?.error) return;
   revalidatePath("/jobs");
   revalidatePath("/settings");
 }
 
 export async function wipeSampleAction() {
-  const user = await requireUser();
-  await sample.wipeSampleWorkspace(user.id);
+  const { userId } = await seated({ owner: true });
+  await sample.wipeSampleWorkspace(userId);
   revalidatePath("/jobs");
   revalidatePath("/settings");
   revalidatePath("/applications");
+}
+
+// ---------------------------------------------------------------------------
+// The team
+// ---------------------------------------------------------------------------
+
+/** Make an invite link; the message carries the link to copy. Owner only. */
+export async function inviteTeammateAction(_: ActionState, form: FormData): Promise<ActionState> {
+  try {
+    const { userId } = await seated({ owner: true });
+    const i = await team.inviteTeammate(userId, {
+      email: String(form.get("email") ?? ""),
+      name: String(form.get("name") ?? ""),
+      role: String(form.get("role") ?? ""),
+      jobIds: form.getAll("jobId").map(String),
+    });
+    revalidatePath("/settings");
+    return { ok: `${await baseUrl()}${i.path}` };
+  } catch (e) {
+    if (e instanceof UserError) return { error: e.message };
+    throw e;
+  }
+}
+
+export async function updateTeammateAction(_: ActionState, form: FormData): Promise<ActionState> {
+  const r = await attempt(async () => {
+    const { userId } = await seated({ owner: true });
+    const role = String(form.get("role") ?? "");
+    await team.updateTeammate(userId, String(form.get("memberId") ?? ""), { role, jobIds: role === "HIRING_MANAGER" ? form.getAll("jobId").map(String) : undefined });
+  }, "Saved.");
+  revalidatePath("/settings");
+  return r;
+}
+
+export async function removeTeammateAction(memberId: string) {
+  const { userId } = await seated({ owner: true });
+  await team.updateTeammate(userId, memberId, { remove: true });
+  revalidatePath("/settings");
+}
+
+export async function revokeInviteAction(inviteId: string) {
+  const { userId } = await seated({ owner: true });
+  await team.revokeInvite(userId, inviteId);
+  revalidatePath("/settings");
+}
+
+/** The join page's form: make the teammate's account and sign them in. */
+export async function acceptInviteAction(_: ActionState, form: FormData): Promise<ActionState> {
+  const password = String(form.get("password") ?? "");
+  if (password !== String(form.get("confirm") ?? "")) return { error: "The two passwords don't match." };
+  let userId = "";
+  const r = await attempt(async () => {
+    userId = (await team.acceptInvite(String(form.get("token") ?? ""), { name: String(form.get("name") ?? ""), password })).userId;
+  });
+  if (r?.error) return r;
+  await createSession(userId);
+  redirect("/jobs");
+}
+
+/** An interviewer's "Write your scorecard": their own one-time scorecard page for this interview. */
+export async function openMyScorecard(interviewId: string) {
+  const { userId, person } = await seated({ interviewId });
+  const l = await interviews.scorecardLink(userId, interviewId, person.name || person.email);
+  redirect(l.path);
 }

@@ -3,6 +3,9 @@ import { UserError } from "@/lib/data/errors";
 import { FormErrors } from "@/lib/data/public";
 import { TOOLS, toolsByName, PROMPTS, promptsByName, MCP_CONTENT, type McpContext } from "@/lib/mcp/tools";
 import { recordError } from "@/lib/data/system";
+import { db } from "@/lib/db";
+import { reach, seatFor, type Seat } from "@/lib/data/team";
+import { ROLE_FOR_YOU, ROLE_LABEL, seesEverything, toolAllowed } from "@/lib/team";
 
 /**
  * A small, stateless implementation of the MCP Streamable HTTP transport,
@@ -23,8 +26,12 @@ const SERVER_INFO = { name: "recruited", title: "Recruited", version: "0.1.0" };
  * What every client is told on connect. Clients truncate this (Claude Code at
  * about 2KB), so the rules that must never be lost come first.
  */
-export function instructions(user: Pick<User, "companyName" | "name">) {
-  return `Recruited is ${user.companyName || user.name || "this person"}'s applicant tracking system: the roles they're hiring for, listings on job boards, application and screening forms, and every applicant. You are connected as them.
+export function instructions(user: Pick<User, "companyName" | "name">, seat?: Pick<Seat, "role">, person?: Pick<User, "name" | "email">) {
+  const who =
+    !seat || seat.role === "OWNER"
+      ? "You are connected as them."
+      : `You are connected as ${person?.name || person?.email || "a teammate"}, a ${ROLE_LABEL[seat.role].toLowerCase()} on their team. ${ROLE_FOR_YOU[seat.role]} The tools you see are the ones that role gets.`;
+  return `Recruited is ${user.companyName || user.name || "this person"}'s applicant tracking system: the roles they're hiring for, listings on job boards, application and screening forms, and every applicant. ${who}
 
 Rules that are never optional:
 - Never invent facts about the role (pay, hours, benefits, must-haves) or about an applicant. Ask.
@@ -59,7 +66,12 @@ const fail = (id: RpcRequest["id"], code: number, message: string) => ({ jsonrpc
 async function callTool(name: string, args: Record<string, unknown>, ctx: McpContext) {
   const tool = toolsByName.get(name);
   if (!tool) return { content: [{ type: "text", text: `There is no tool called ${name}.` }], isError: true };
+  if (!toolAllowed(ctx.seat.role, name))
+    return { content: [{ type: "text", text: `${name} isn't available to a ${ROLE_LABEL[ctx.seat.role].toLowerCase()} in this workspace.` }], isError: true };
   try {
+    // Every id a narrow role sends must be one its seat reaches, before the tool runs.
+    const id = (k: string) => (typeof args?.[k] === "string" ? (args[k] as string) : undefined);
+    await reach(ctx.seat, { jobId: id("job_id"), applicationId: id("application_id"), interviewId: id("interview_id"), uploadId: id("upload_id") });
     const result = await tool.handler(args ?? {}, ctx);
     if (result && typeof result === "object" && MCP_CONTENT in result) return { content: (result as Record<string, unknown>)[MCP_CONTENT] };
     return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }], structuredContent: Array.isArray(result) ? { items: result } : result };
@@ -80,21 +92,22 @@ async function handleOne(req: RpcRequest, ctx: McpContext) {
         protocolVersion: PROTOCOL_VERSIONS.includes(asked) ? asked : PROTOCOL_VERSIONS[0],
         capabilities: { tools: { listChanged: false }, prompts: { listChanged: false } },
         serverInfo: SERVER_INFO,
-        instructions: instructions(ctx.user),
+        instructions: instructions(ctx.user, ctx.seat, ctx.person),
       });
     }
     case "ping":
       return ok(id, {});
     case "tools/list":
       return ok(id, {
-        tools: TOOLS.map((t) => ({ name: t.name, title: t.title, description: t.description, inputSchema: t.inputSchema, annotations: { title: t.title, ...t.annotations } })),
+        tools: TOOLS.filter((t) => toolAllowed(ctx.seat.role, t.name)).map((t) => ({ name: t.name, title: t.title, description: t.description, inputSchema: t.inputSchema, annotations: { title: t.title, ...t.annotations } })),
       });
     case "tools/call":
       return ok(id, await callTool(String(params.name ?? ""), (params.arguments as Record<string, unknown>) ?? {}, ctx));
     case "prompts/list":
-      return ok(id, { prompts: PROMPTS.map(({ render: _r, ...p }) => p) });
+      // Prompts compose the full toolset, so only owners and recruiters see them.
+      return ok(id, { prompts: seesEverything(ctx.seat.role) ? PROMPTS.map(({ render: _r, ...p }) => p) : [] });
     case "prompts/get": {
-      const p = promptsByName.get(String(params.name ?? ""));
+      const p = seesEverything(ctx.seat.role) ? promptsByName.get(String(params.name ?? "")) : undefined;
       if (!p) return fail(id, -32602, "Unknown prompt.");
       const args = (params.arguments as Record<string, string>) ?? {};
       for (const a of p.arguments) if (a.required && !args[a.name]) return fail(id, -32602, `Missing argument ${a.name}.`);
@@ -107,14 +120,18 @@ async function handleOne(req: RpcRequest, ctx: McpContext) {
   }
 }
 
-export async function handleMcpPost(request: Request, user: User, baseUrl: string) {
+/** person is whoever the connection token belongs to; the seat says which workspace and how much of it. */
+export async function handleMcpPost(request: Request, person: User, baseUrl: string) {
   let body: unknown;
   try {
     body = await request.json();
   } catch {
     return Response.json(fail(null, -32700, "Parse error"), { status: 400, headers: corsHeaders() });
   }
-  const ctx: McpContext = { userId: user.id, user, baseUrl };
+  const seat = await seatFor(person);
+  const user = seat.userId === person.id ? person : await db.user.findUnique({ where: { id: seat.userId } });
+  if (!user) return mcpUnauthorized();
+  const ctx: McpContext = { userId: seat.userId, user, person, seat, baseUrl };
   const batch = Array.isArray(body) ? (body as RpcRequest[]) : [body as RpcRequest];
   const responses = [];
   for (const msg of batch) {

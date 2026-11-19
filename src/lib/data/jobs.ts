@@ -99,9 +99,10 @@ function stageCounts(rows: { stage: Stage }[]) {
   return counts;
 }
 
-export async function listJobs(userId: string, opts: { status?: JobStatus } = {}) {
+/** jobIds narrows to those jobs: a hiring manager's. */
+export async function listJobs(userId: string, opts: { status?: JobStatus; jobIds?: string[] } = {}) {
   const jobs = await db.job.findMany({
-    where: { userId, archivedAt: null, ...(opts.status ? { status: opts.status } : {}) },
+    where: { userId, archivedAt: null, ...(opts.status ? { status: opts.status } : {}), ...(opts.jobIds ? { id: { in: opts.jobIds } } : {}) },
     orderBy: [{ status: "asc" }, { updatedAt: "desc" }],
     include: {
       listings: { select: { id: true, board: true, variant: true, status: true } },

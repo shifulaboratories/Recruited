@@ -1,19 +1,22 @@
 import { currentUser } from "@/lib/auth";
 import { exportApplicantData } from "@/lib/data/privacy";
 import { UserError } from "@/lib/data/errors";
+import { requireFull, seatFor } from "@/lib/data/team";
 
 export const dynamic = "force-dynamic";
 
 /**
  * Everything held about one applicant as a JSON download, for the signed-in
- * owner of the workspace: the app's side of export_applicant_data, for
+ * owner of the workspace or a recruiter: the app's side of export_applicant_data, for
  * answering a data request.
  */
 export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
   const user = await currentUser();
   if (!user) return new Response("Sign in to download this.", { status: 401 });
   try {
-    const data = await exportApplicantData(user.id, { applicationId: (await params).id });
+    const seat = await seatFor(user);
+    requireFull(seat);
+    const data = await exportApplicantData(seat.userId, { applicationId: (await params).id });
     const name = data.person.name.replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-|-$/g, "").toLowerCase() || "applicant";
     return new Response(JSON.stringify(data, null, 2), {
       headers: {

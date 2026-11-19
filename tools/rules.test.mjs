@@ -13,6 +13,7 @@ import { bestListing } from "../src/lib/listing-score.ts";
 import { jobPostingLd, ldJson } from "../src/lib/job-posting.ts";
 import { publicStatusOf, STATUS_COPY } from "../src/lib/applicant-status.ts";
 import { privacyNotice, retentionSentence } from "../src/lib/privacy.ts";
+import { OWNER_TOOLS, SCOPED_TOOLS, toolAllowed, jobScope, MEMBER_ROLES } from "../src/lib/team.ts";
 
 const t = (o) => ({ ...EMPTY_TELEMETRY, ...o });
 
@@ -306,4 +307,24 @@ test("the privacy notice says who, how long and where to write", () => {
   assert.match(n, /^Your application goes to Acme and no one else\./);
   assert.match(n, /email privacy@acme\.test\.$/);
   assert.match(privacyNotice({ company: "", retentionMonths: 12, contactEmail: "" }), /reply to any email they send you/);
+});
+
+test("roles: the owner gets everything, a recruiter all but the owner's, narrow roles only their lists", () => {
+  for (const name of ["send_message", "invite_teammate", "list_jobs"]) assert.ok(toolAllowed("OWNER", name));
+  for (const name of OWNER_TOOLS) assert.equal(toolAllowed("RECRUITER", name), false, name);
+  assert.ok(toolAllowed("RECRUITER", "send_message"));
+  for (const role of ["HIRING_MANAGER", "INTERVIEWER"]) {
+    for (const name of SCOPED_TOOLS[role]) assert.ok(!OWNER_TOOLS.includes(name), `${role} gets owner tool ${name}`);
+    for (const name of ["send_message", "save_message", "record_offer", "delete_applicant_data", "share_applicant"]) assert.equal(toolAllowed(role, name), false, `${role} gets ${name}`);
+  }
+  for (const name of SCOPED_TOOLS.INTERVIEWER) assert.ok(SCOPED_TOOLS.HIRING_MANAGER.includes(name), `an interviewer gets ${name} and a hiring manager doesn't`);
+  assert.ok(!MEMBER_ROLES.includes("OWNER"));
+});
+
+test("jobScope narrows to the allowed jobs, and a job outside them matches nothing", () => {
+  assert.deepEqual(jobScope(undefined, undefined), {});
+  assert.deepEqual(jobScope("j1", undefined), { jobId: "j1" });
+  assert.deepEqual(jobScope(undefined, ["j1", "j2"]), { jobId: { in: ["j1", "j2"] } });
+  assert.deepEqual(jobScope("j2", ["j1", "j2"]), { jobId: { in: ["j2"] } });
+  assert.deepEqual(jobScope("j3", ["j1"]), { jobId: { in: [] } });
 });

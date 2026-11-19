@@ -165,6 +165,11 @@ export const CASES = [
     expect: ["daily_brief"],
     why: "The one read for 'what's on'.",
   },
+  {
+    prompt: "Add my co-founder Sam (sam@acme.test) so they can see the applicants for the bookkeeper role.",
+    expect: ["list_jobs", "invite_teammate"],
+    why: "A teammate is an invite with a role; a hiring manager needs the job's id first. Not share_applicant, which is one read-only link per applicant.",
+  },
 ];
 
 /** Things that should get an answer in words, with no tool at all. */
