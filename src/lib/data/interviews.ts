@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { notFound, UserError } from "@/lib/data/errors";
 import { requireApplication } from "@/lib/data/applications";
 import { secret } from "@/lib/ids";
+import { jobScope } from "@/lib/team";
 import {
   INTERVIEW_FORMATS,
   OFFER_STATUSES,
@@ -52,7 +53,19 @@ export type InterviewInput = {
   interviewers?: string;
   location?: string;
   status?: string;
+  /** Teammates on the panel, by account id (list_team). Replaces the list when given. */
+  memberIds?: string[];
 };
+
+/** Every id must be this workspace's owner or one of its teammates. */
+async function panelIds(userId: string, ids: string[] | undefined) {
+  if (ids === undefined) return {};
+  const unique = Array.from(new Set(ids.map((x) => x.trim()).filter(Boolean)));
+  const known = new Set([userId, ...(await db.membership.findMany({ where: { workspaceId: userId }, select: { userId: true } })).map((m) => m.userId)]);
+  const stranger = unique.find((id) => !known.has(id));
+  if (stranger) throw new UserError(`${stranger} isn't on this workspace's team. Ids come from list_team.`);
+  return { memberIds: unique };
+}
 
 function interviewData(input: InterviewInput) {
   if (input.durationMin != null && (!Number.isInteger(input.durationMin) || input.durationMin < 5 || input.durationMin > 600))
@@ -73,8 +86,9 @@ export async function addInterview(userId: string, applicationId: string, input:
   const a = await requireApplication(userId, applicationId);
   if (!input.title?.trim()) throw new UserError("Say what the interview is, e.g. 'screening call' or 'final with the founder'.");
   const last = await db.interview.findFirst({ where: { userId, applicationId: a.id }, orderBy: { round: "desc" }, select: { round: true } });
+  const panel = await panelIds(userId, input.memberIds);
   return db.interview.create({
-    data: { userId, applicationId: a.id, round: (last?.round ?? 0) + 1, title: input.title.trim(), ...interviewData(input) },
+    data: { userId, applicationId: a.id, round: (last?.round ?? 0) + 1, title: input.title.trim(), ...interviewData(input), ...panel },
   });
 }
 
@@ -88,7 +102,8 @@ async function requireInterview(userId: string, interviewId: string) {
 export async function updateInterview(userId: string, interviewId: string, input: InterviewInput) {
   const i = await requireInterview(userId, interviewId);
   if (input.title !== undefined && !input.title.trim()) throw new UserError("An interview needs a title.");
-  return db.interview.update({ where: { id: i.id }, data: interviewData(input) });
+  const panel = await panelIds(userId, input.memberIds);
+  return db.interview.update({ where: { id: i.id }, data: { ...interviewData(input), ...panel } });
 }
 
 export function bookingPath(token: string) {
@@ -125,14 +140,18 @@ export async function deleteInterview(userId: string, interviewId: string) {
 }
 
 /** Interviews in a window across every live job, earliest first, for "what's on this week". */
-export async function listInterviews(userId: string, input: { from?: string; to?: string; jobId?: string; status?: string }) {
+export async function listInterviews(
+  userId: string,
+  input: { from?: string; to?: string; jobId?: string; status?: string; jobIds?: string[]; memberId?: string },
+) {
   const from = when(input.from, "from") ?? undefined;
   const to = when(input.to, "to") ?? undefined;
   const status = oneOf(input.status, ["SCHEDULED", "DONE", "CANCELLED", "NO_SHOW"] as InterviewStatus[], "status");
   const rows = await db.interview.findMany({
     where: {
       userId,
-      application: { ...LIVE, ...(input.jobId ? { jobId: input.jobId } : {}) },
+      application: { ...LIVE, ...jobScope(input.jobId, input.jobIds) },
+      ...(input.memberId ? { memberIds: { has: input.memberId } } : {}),
       ...(status ? { status } : {}),
       ...(from || to ? { scheduledAt: { ...(from ? { gte: from } : {}), ...(to ? { lte: to } : {}) } } : {}),
     },

@@ -1,10 +1,17 @@
-import { baseUrl, requireUser } from "@/lib/auth";
+import { baseUrl, requireSeat } from "@/lib/auth";
+import { listTeam } from "@/lib/data/team";
+import { listJobs } from "@/lib/data/jobs";
+import { MEMBER_ROLES, ROLE_FOR_YOU, ROLE_LABEL, ROLE_SUMMARY, toolAllowed } from "@/lib/team";
 import { mcpPath, primaryConnection } from "@/lib/data/connections";
 import {
   connectMailboxAction,
   disconnectMailboxAction,
   loadSampleAction,
+  inviteTeammateAction,
+  removeTeammateAction,
+  revokeInviteAction,
   rotateConnection,
+  updateTeammateAction,
   saveAccount,
   saveReceiptAction,
   setSpamCheck,
@@ -20,21 +27,28 @@ import { TOOLS } from "@/lib/mcp/tools";
 export const metadata = { title: "Connect Claude" };
 
 export default async function SettingsPage() {
-  const user = await requireUser();
-  const conn = await primaryConnection(user.id);
+  // person: your own account and connection. user: the workspace (its owner's account), for the company and the mailbox.
+  const { person, workspace: user, seat, userId } = await requireSeat();
+  const owner = seat.role === "OWNER";
+  const conn = await primaryConnection(person.id);
   const origin = await baseUrl();
   const url = `${origin}${mcpPath(conn.token)}`;
-  const sample = await hasSample(user.id);
+  const sample = owner ? await hasSample(userId) : false;
   const spam = await spamCheckStatus();
-  const mail = await getMailbox(user.id);
+  const mail = await getMailbox(userId);
+  const team = await listTeam(userId);
+  const jobs = owner ? await listJobs(userId) : [];
+  const tools = TOOLS.filter((t) => toolAllowed(seat.role, t.name)).length;
   return (
     <div className="space-y-8 max-w-2xl">
       <header className="rise space-y-1.5">
         <p className="eyebrow">Settings</p>
         <h1 className="h-page">Connect Claude</h1>
         <p className="text-rt-muted">
-          Recruited is built to be run from a conversation. Add this URL as a custom connector and Claude gets {TOOLS.length} tools: writing
-          listings for each board, building forms, reading applicants and moving them along.
+          Recruited is built to be run from a conversation. Add this URL as a custom connector and Claude gets {tools} tools
+          {owner || seat.role === "RECRUITER"
+            ? ": writing listings for each board, building forms, reading applicants and moving them along."
+            : `, the ones a ${ROLE_LABEL[seat.role].toLowerCase()} gets. The URL is yours alone: it acts as you, with your role.`}
         </p>
       </header>
       <section className="card rise p-5 space-y-4" style={{ ["--i" as string]: 1 }}>
@@ -58,6 +72,7 @@ export default async function SettingsPage() {
         </form>
       </section>
 
+      {owner && (
       <section className="card p-5">
         <h2 className="h-section mb-1">Your company</h2>
         <p className="text-[12.5px] text-rt-faint mb-3">Shown at the top of every public job page. Claude can write the description with you.</p>
@@ -103,7 +118,9 @@ export default async function SettingsPage() {
           )}
         </ActionForm>
       </section>
+      )}
 
+      {owner && (
       <section className="card p-5 space-y-4">
         <div>
           <h2 className="h-section mb-1">Your mailbox</h2>
@@ -176,17 +193,80 @@ export default async function SettingsPage() {
           </>
         )}
       </section>
+      )}
+
+      <section className="card p-5 space-y-4">
+        <div>
+          <h2 className="h-section mb-1">Your team</h2>
+          <p className="text-[12.5px] text-rt-muted">
+            {owner
+              ? "Invite the people you hire with. Each signs in with their own password and connects their own Claude, which reaches only what their role does."
+              : `You're a ${ROLE_LABEL[seat.role].toLowerCase()} here. ${ROLE_FOR_YOU[seat.role]}`}
+          </p>
+        </div>
+        <ul className="divide-y divide-rt-border">
+          {team.members.map((m) => (
+            <li key={m.id} className="py-2.5 space-y-2">
+              <div className="flex flex-wrap items-baseline gap-x-3">
+                <span className="font-medium">{m.name || m.email}</span>
+                {m.name && <span className="text-xs text-rt-muted">{m.email}</span>}
+                <span className="chip">{ROLE_LABEL[m.role]}</span>
+                {m.jobs.length > 0 && <span className="text-xs text-rt-faint">{m.jobs.map((j) => j.title).join(", ")}</span>}
+              </div>
+              {owner && m.role !== "OWNER" && (
+                <details className="text-sm">
+                  <summary className="btn btn-quiet text-xs cursor-pointer">Change or remove</summary>
+                  <ActionForm action={updateTeammateAction} submit="Save role" className="pt-3">
+                    <input type="hidden" name="memberId" value={m.id} />
+                    <RoleFields jobs={jobs} role={m.role} jobIds={m.jobs.map((j) => j.id)} />
+                  </ActionForm>
+                  <form action={removeTeammateAction.bind(null, m.id)} className="pt-3">
+                    <button className="btn btn-quiet text-xs">Remove {m.name || m.email}: they&apos;re signed out and their connection stops</button>
+                  </form>
+                </details>
+              )}
+            </li>
+          ))}
+          {team.invites.map((i) => (
+            <li key={i.id} className="py-2.5 flex flex-wrap items-baseline gap-x-3">
+              <span className="text-rt-muted">{i.email}</span>
+              <span className="chip">{ROLE_LABEL[i.role]}</span>
+              <span className="text-xs text-rt-faint">Invited, not joined yet</span>
+              {owner && (
+                <form action={revokeInviteAction.bind(null, i.id)} className="ml-auto">
+                  <button className="btn btn-quiet text-xs">Withdraw</button>
+                </form>
+              )}
+            </li>
+          ))}
+        </ul>
+        {owner && (
+          <details className="text-sm">
+            <summary className="btn text-xs cursor-pointer">Invite someone</summary>
+            <ActionForm action={inviteTeammateAction} submit="Make an invite link" className="pt-3">
+              <p className="text-[12.5px] text-rt-faint">
+                Nothing is emailed. You get a link that works once, for 7 days; send it to them yourself. They choose their own password.
+              </p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <input className="field" name="email" type="email" placeholder="Their email" required />
+                <input className="field" name="name" placeholder="Their name" />
+              </div>
+              <RoleFields jobs={jobs} />
+            </ActionForm>
+          </details>
+        )}
+      </section>
 
       <section className="card p-5">
         <h2 className="h-section mb-3">Your account</h2>
         <ActionForm action={saveAccount} submit="Save">
           <label className="block space-y-1">
             <span className="text-rt-muted">Your name</span>
-            <input className="field" name="name" defaultValue={user.name} />
+            <input className="field" name="name" defaultValue={person.name} />
           </label>
           <label className="block space-y-1">
             <span className="text-rt-muted">Email</span>
-            <input className="field" name="email" defaultValue={user.email} />
+            <input className="field" name="email" defaultValue={person.email} />
           </label>
           <label className="block space-y-1">
             <span className="text-rt-muted">New password (leave empty to keep it)</span>
@@ -195,7 +275,7 @@ export default async function SettingsPage() {
         </ActionForm>
       </section>
 
-      {user.role === "OWNER" && (
+      {owner && person.role === "OWNER" && (
         <section className="card p-5">
           <h2 className="h-section mb-1">Spam check</h2>
           <p className="text-[12.5px] text-rt-muted mb-3">
@@ -221,6 +301,7 @@ export default async function SettingsPage() {
         </section>
       )}
 
+      {owner && (
       <section className="card p-5 flex flex-wrap items-center gap-3">
         <div className="flex-1 min-w-[220px]">
           <h2 className="h-section">Sample workspace</h2>
@@ -234,6 +315,36 @@ export default async function SettingsPage() {
           <button className={`btn text-xs ${sample ? "" : "btn-primary"}`}>{sample ? "Remove sample" : "Load sample"}</button>
         </form>
       </section>
+      )}
+    </div>
+  );
+}
+
+/** The role picker, plus the jobs a hiring manager sees. Every option says what the role gets. */
+function RoleFields({ jobs, role, jobIds = [] }: { jobs: { id: string; title: string }[]; role?: string; jobIds?: string[] }) {
+  return (
+    <div className="space-y-2">
+      {MEMBER_ROLES.map((r) => (
+        <label key={r} className="flex items-start gap-2">
+          <input type="radio" name="role" value={r} defaultChecked={r === (role ?? "RECRUITER")} className="mt-1" />
+          <span>
+            <span className="font-medium">{ROLE_LABEL[r]}</span> <span className="text-[12.5px] text-rt-muted">{ROLE_SUMMARY[r]}</span>
+          </span>
+        </label>
+      ))}
+      {jobs.length > 0 && (
+        <fieldset className="space-y-1 pl-6">
+          <legend className="text-[12px] text-rt-muted">For a hiring manager, the jobs they see</legend>
+          <div className="flex flex-wrap gap-x-4 gap-y-1">
+            {jobs.map((j) => (
+              <label key={j.id} className="inline-flex items-center gap-1.5 text-[13px]">
+                <input type="checkbox" name="jobId" value={j.id} defaultChecked={jobIds.includes(j.id)} />
+                {j.title}
+              </label>
+            ))}
+          </div>
+        </fieldset>
+      )}
     </div>
   );
 }

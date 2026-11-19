@@ -1,5 +1,6 @@
 import type { Origin, Prisma, Stage, Tier } from "@prisma/client";
 import { db } from "@/lib/db";
+import { jobScope } from "@/lib/team";
 import { notFound, UserError } from "@/lib/data/errors";
 import { requireJob } from "@/lib/data/jobs";
 import { secret } from "@/lib/ids";
@@ -123,13 +124,13 @@ function rollup(answers: { origin: Origin; styleScore: number; value: string; te
 
 export async function listApplications(
   userId: string,
-  opts: { jobId?: string; stage?: Stage; listingId?: string; qualified?: boolean; tier?: Tier; sort?: "newest" | "tier"; limit?: number } = {},
+  opts: { jobId?: string; jobIds?: string[]; stage?: Stage; listingId?: string; qualified?: boolean; tier?: Tier; sort?: "newest" | "tier"; limit?: number } = {},
 ) {
   const where: Prisma.ApplicationWhereInput = {
     userId,
     archivedAt: null,
     job: { archivedAt: null },
-    ...(opts.jobId ? { jobId: opts.jobId } : {}),
+    ...jobScope(opts.jobId, opts.jobIds),
     ...(opts.stage ? { stage: opts.stage } : {}),
     ...(opts.listingId ? { listingId: opts.listingId } : {}),
     ...(opts.qualified !== undefined ? { qualified: opts.qualified } : {}),

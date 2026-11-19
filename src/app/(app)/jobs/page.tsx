@@ -1,5 +1,7 @@
 import Link from "next/link";
-import { requireUser } from "@/lib/auth";
+import { redirect } from "next/navigation";
+import { requireSeat } from "@/lib/auth";
+import { seesEverything } from "@/lib/team";
 import { formatPay, listJobs } from "@/lib/data/jobs";
 import { listApplications, STAGES } from "@/lib/data/applications";
 import { listInterviews } from "@/lib/data/interviews";
@@ -15,15 +17,18 @@ export const metadata = { title: "Jobs" };
 const WEEK = 7 * 24 * 60 * 60 * 1000;
 
 export default async function JobsPage() {
-  const user = await requireUser();
+  const { person: user, seat, userId } = await requireSeat();
+  if (seat.panelId) redirect("/interviews");
+  const full = seesEverything(seat.role);
   const now = new Date();
   const [jobs, { applications }, interviews, brief] = await Promise.all([
-    listJobs(user.id),
-    listApplications(user.id, { limit: 500 }),
-    listInterviews(user.id, { from: now.toISOString(), to: new Date(now.getTime() + WEEK).toISOString(), status: "SCHEDULED" }),
-    dailyBrief(user.id, { now }),
+    listJobs(userId, { jobIds: seat.jobIds }),
+    listApplications(userId, { limit: 500, jobIds: seat.jobIds }),
+    listInterviews(userId, { from: now.toISOString(), to: new Date(now.getTime() + WEEK).toISOString(), status: "SCHEDULED", jobIds: seat.jobIds }),
+    // The brief covers the whole workspace, so a hiring manager doesn't get it.
+    full ? dailyBrief(userId, { now }) : null,
   ]);
-  const today = todayItems(brief);
+  const today = brief ? todayItems(brief) : [];
   const thisWeek = applications.filter((a) => now.getTime() - a.appliedAt.getTime() < WEEK).length;
   const aTier = applications.filter((a) => a.effectiveTier === "A" && a.stage !== "REJECTED" && a.stage !== "HIRED").length;
   const undecided = applications.filter((a) => a.tierIsProposal).length;
@@ -77,6 +82,7 @@ export default async function JobsPage() {
         <div className="flex items-center gap-3">
           <h2 className="h-section">Roles</h2>
           <div className="flex-1" />
+          {full && (
           <details className="relative group">
             <summary className="btn text-xs cursor-pointer">New role</summary>
             <div className="card absolute right-0 z-30 mt-2 w-[min(420px,calc(100vw-32px))] p-4 shadow-[var(--rt-shadow-raised)]">
@@ -86,14 +92,23 @@ export default async function JobsPage() {
               </ActionForm>
             </div>
           </details>
+          )}
         </div>
 
         {jobs.length === 0 ? (
           <div className="space-y-3">
-            <Empty icon="jobs" title="No roles yet" ask="I'm hiring an operations VA, full time. Post it on OnlineJobs.ph and LinkedIn." />
-            <form action={loadSampleAction} className="text-center">
-              <button className="btn btn-quiet text-xs">Or look around a sample role first</button>
-            </form>
+            {full ? (
+              <>
+                <Empty icon="jobs" title="No roles yet" ask="I'm hiring an operations VA, full time. Post it on OnlineJobs.ph and LinkedIn." />
+                {seat.role === "OWNER" && (
+                  <form action={loadSampleAction} className="text-center">
+                    <button className="btn btn-quiet text-xs">Or look around a sample role first</button>
+                  </form>
+                )}
+              </>
+            ) : (
+              <Empty icon="jobs" title="No roles shared with you yet" ask="The workspace's owner chooses which jobs you see." />
+            )}
           </div>
         ) : (
           <div className="grid md:grid-cols-2 gap-3">

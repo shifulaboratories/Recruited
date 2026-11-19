@@ -361,3 +361,47 @@ anchors on it. If an interviewer needs the answers, the person can give them the
 `/s/` share link, which was built for that. The scorecard is written through
 `addScorecard` like any other, with `writtenBy: "link"`, so it marks the interview DONE
 and feeds the panel view.
+
+## 2026-11-20 — Teams: the workspace is the owner's account, and a seat says how much of it
+
+William chose "yes, build workspaces with roles" on 19 Nov, reversing the one-person
+stance borrowed from Hired. Roadmap items 19 and 20.
+
+The shape keeps every existing guarantee. Content rows still carry `userId`, and it is
+still the first argument of every data function; it now means the workspace, which is
+its owner's account id. A teammate is a separate `User` with a `Membership` pointing at
+that workspace. Nothing migrated: an existing account is the owner of its workspace.
+The alternative, a `Workspace` model with every row re-keyed to it, would have touched
+every model and every query for no gain a small team would notice.
+
+`seatFor` turns the signed-in or connected person into a `Seat`: the workspace id plus a
+role. Narrow roles are enforced at the two doors, not inside the ~60 data functions:
+
+- the tool or action has to be one the role gets (`toolAllowed`; tools a role doesn't get
+  are hidden from tools/list, as Hired hides admin tools), and
+- every `job_id`, `application_id`, `interview_id` and `upload_id` goes through `reach`
+  before anything runs. The handler does this by argument name, so a narrow role's tools
+  must take only those kinds of id. That's why `SCOPED_TOOLS` is short and explicit.
+
+Four fixed roles, never custom permissions. Recruiter: all hiring work. Hiring manager:
+only `Membership.jobIds`, and no messages or offers. Interviewer: only interviews whose
+`memberIds` include them; `get_application` gives them the answers without anyone's
+verdict, tier, notes or the applicant's contact details, and `record_scorecard` writes
+under their own name whatever the assistant passes. In the app an interviewer gets one
+page, "Your interviews", and its button mints their own `/score/` link, reusing the
+blind scorecard page from item 21 rather than building a second form.
+
+Invites are one-time links, like reset links: only the hash is stored, 7 days, spent in
+a conditional write. Nothing is emailed: the server still sends no mail of its own.
+An address that already has an account on the instance can't be invited, because an
+account belongs to at most one workspace; a person in two teams uses two addresses.
+Removing a teammate deletes their account, which ends their sessions and connections at
+once. The workspace's rows were never theirs, so nothing else goes.
+
+Each teammate's MCP connection is their own (`Connection.userId` is the person), which
+is item 20: the connection acts as them, with their role, and `get_password_reset_link`
+resets their account, not the owner's.
+
+The mailbox stays one per workspace, connected by the owner. A recruiter's Send goes out
+from it. Per-person mailboxes can come later if a team asks; the send rules don't change.
+Prompts are hidden from narrow roles, because each one composes tools they don't have.

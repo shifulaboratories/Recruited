@@ -18,6 +18,7 @@ import * as sample from "@/lib/data/sample";
 import * as users from "@/lib/data/users";
 import * as settings from "@/lib/data/settings";
 import * as system from "@/lib/data/system";
+import * as team from "@/lib/data/team";
 import { UserError } from "@/lib/data/errors";
 import { careersPath } from "@/lib/data/public";
 import { statusPath } from "@/lib/applicant-status";
@@ -26,20 +27,25 @@ import { QUESTION_TYPES } from "@/lib/forms";
 import { MESSAGE_KINDS } from "@/lib/messages";
 import { SECURITY } from "@/lib/smtp";
 import { IMPORT_FIELDS, type ImportField } from "@/lib/csv";
+import { MEMBER_ROLES, ROLE_SUMMARY } from "@/lib/team";
 import { INTERVIEW_FORMATS, OFFER_STATUSES, PAY_PERIODS, RECOMMENDATIONS } from "@/lib/scorecards";
 
 /**
  * Every tool and prompt, in one array each. The description IS the interface:
  * it says when to reach for the tool, what comes back, and what it overwrites.
  *
- * Every handler receives ctx.userId from the connection token and passes it
- * as the first argument of every data call, so a connection can only reach
- * its own workspace.
+ * Every handler receives ctx.userId, the workspace the connection's person
+ * sits in, and passes it as the first argument of every data call, so a
+ * connection can only reach its own workspace. ctx.seat says what the person's
+ * role reaches; the handler hides and refuses tools the role doesn't get and
+ * checks every job_id, application_id, interview_id and upload_id against the
+ * seat before a tool runs (src/lib/data/team.ts). Lists filter by the seat here.
  */
 
 type Json = Record<string, unknown>;
 
-export type McpContext = { userId: string; user: User; baseUrl: string };
+/** userId and user are the workspace (its owner's account); person is who connected; seat is their role. */
+export type McpContext = { userId: string; user: User; person: User; seat: team.Seat; baseUrl: string };
 
 export type McpTool = {
   name: string;
@@ -77,6 +83,12 @@ function need(args: Json, key: string): string {
   const v = s(args, key);
   if (!v?.trim()) throw new UserError(`${key} is required.`);
   return v;
+}
+function list(args: Json, key: string): string[] | undefined {
+  const v = args[key];
+  if (v === undefined || v === null) return undefined;
+  if (!Array.isArray(v) || v.some((x) => typeof x !== "string")) throw new UserError(`${key} must be a list of ids.`);
+  return v as string[];
 }
 function n(args: Json, key: string): number | undefined {
   const v = args[key];
@@ -201,7 +213,7 @@ export const TOOLS: McpTool[] = [
     inputSchema: object({ status: oneOf(JOB_STATUS, "Only jobs in this status.") }),
     annotations: READ,
     handler: async (args, ctx) =>
-      (await jobs.listJobs(ctx.userId, { status: s(args, "status") as JobStatus | undefined })).map((j) => ({
+      (await jobs.listJobs(ctx.userId, { status: s(args, "status") as JobStatus | undefined, jobIds: ctx.seat.jobIds })).map((j) => ({
         id: j.id,
         title: j.title,
         status: j.status,
@@ -424,6 +436,7 @@ export const TOOLS: McpTool[] = [
     handler: async (args, ctx) =>
       applications.listApplications(ctx.userId, {
         jobId: s(args, "job_id"),
+        jobIds: ctx.seat.jobIds,
         stage: s(args, "stage") as Stage | undefined,
         listingId: s(args, "listing_id"),
         qualified: typeof args.qualified === "boolean" ? args.qualified : undefined,
@@ -449,6 +462,20 @@ export const TOOLS: McpTool[] = [
       const id = need(args, "application_id");
       const { screenToken, sharePath, ...rest } = await applications.getApplication(ctx.userId, id);
       const io = await interviews.interviewsAndOffers(ctx.userId, id);
+      if (ctx.seat.panelId) {
+        // An interviewer: the application and their own rounds, without anyone's verdict, tier, notes, messages or offers.
+        const mine = new Set((await interviews.listInterviews(ctx.userId, { memberId: ctx.seat.panelId })).filter((i) => i.applicationId === id).map((i) => i.id));
+        return {
+          id: rest.id,
+          stage: rest.stage,
+          job: rest.job,
+          candidate: { name: rest.candidate.name, links: rest.candidate.links },
+          provenance: rest.provenance,
+          probes: rest.probes,
+          submissions: rest.submissions,
+          interviews: io.interviews.filter((i) => mine.has(i.id)).map(({ bookingPath: _b, scorecards: _s, ...i }) => i),
+        };
+      }
       const refs = await references.listReferences(ctx.userId, id);
       return {
         ...rest,
@@ -626,6 +653,11 @@ export const TOOLS: McpTool[] = [
       duration_min: num("Length in minutes."),
       interviewers: str("Who they'll meet, as the person said it."),
       location: str("A meeting link or an address."),
+      member_ids: {
+        type: "array",
+        items: { type: "string" },
+        description: "Teammates on the panel, by id from list_team. Replaces the list. A teammate with the interviewer role sees only the interviews they're on, so add them here for them to see this one.",
+      },
       status: oneOf(["SCHEDULED", "DONE", "CANCELLED", "NO_SHOW"], "Only when changing an interview."),
       offer_times: { type: "array", items: { type: "string" }, description: "Times for the applicant to pick from, ISO 8601 with offset, up to twelve. Use instead of scheduled_at." },
     }),
@@ -639,6 +671,7 @@ export const TOOLS: McpTool[] = [
         interviewers: s(args, "interviewers"),
         location: s(args, "location"),
         status: s(args, "status"),
+        memberIds: list(args, "member_ids"),
       };
       const offer = args.offer_times;
       if (offer !== undefined) {
@@ -683,7 +716,14 @@ export const TOOLS: McpTool[] = [
     }),
     annotations: READ,
     handler: (args, ctx) =>
-      interviews.listInterviews(ctx.userId, { from: s(args, "from"), to: s(args, "to"), jobId: s(args, "job_id"), status: s(args, "status") }),
+      interviews.listInterviews(ctx.userId, {
+        from: s(args, "from"),
+        to: s(args, "to"),
+        jobId: s(args, "job_id"),
+        status: s(args, "status"),
+        jobIds: ctx.seat.jobIds,
+        memberId: ctx.seat.panelId,
+      }),
   },
   {
     name: "record_scorecard",
@@ -709,7 +749,8 @@ export const TOOLS: McpTool[] = [
     annotations: ADD,
     handler: async (args, ctx) => {
       const c = await interviews.addScorecard(ctx.userId, need(args, "interview_id"), {
-        interviewer: need(args, "interviewer"),
+        // An interviewer writes only their own card, under their own name.
+        interviewer: ctx.seat.panelId ? ctx.person.name || ctx.person.email : need(args, "interviewer"),
         recommendation: need(args, "recommendation"),
         ratings: args.ratings,
         summary: s(args, "summary"),
@@ -1122,8 +1163,8 @@ export const TOOLS: McpTool[] = [
     inputSchema: object({}),
     annotations: ADD,
     handler: async (_args, ctx) => {
-      const r = await users.resetLinkFor(ctx.userId);
-      return { url: `${ctx.baseUrl}${users.resetPath(r.token)}`, account: ctx.user.email, validForMinutes: r.minutes };
+      const r = await users.resetLinkFor(ctx.person.id);
+      return { url: `${ctx.baseUrl}${users.resetPath(r.token)}`, account: ctx.person.email, validForMinutes: r.minutes };
     },
   },
   {
@@ -1143,6 +1184,64 @@ export const TOOLS: McpTool[] = [
     inputSchema: object({}),
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
     handler: (_args, ctx) => sample.wipeSampleWorkspace(ctx.userId),
+  },
+  {
+    name: "list_team",
+    title: "List the team",
+    description:
+      "Who works in this workspace and in what role: the owner, every teammate (with a hiring manager's jobs) and every invite not yet accepted. " +
+      "Reach for it for 'who's on the team', before invite_teammate or update_teammate, and for the ids schedule_interview's member_ids takes. Read-only.",
+    inputSchema: object({}),
+    annotations: READ,
+    handler: async (_args, ctx) => ({ you: { id: ctx.person.id, role: ctx.seat.role }, ...(await team.listTeam(ctx.userId)) }),
+  },
+  {
+    name: "invite_teammate",
+    title: "Invite a teammate",
+    description:
+      "Make a one-time link for someone to join this workspace with a role. Owner only. Roles: " +
+      MEMBER_ROLES.map((r) => `${r}: ${ROLE_SUMMARY[r]}`).join(" ") +
+      " Ask the person which role and, for a hiring manager, which jobs (ids from list_jobs); don't choose for them. " +
+      "Sends nothing: give the person the link to pass on. It works once, for 7 days, and the teammate sets their own name and password through it; inviting the same address again replaces the link. " +
+      "Each teammate then connects their own assistant from their own Settings, and that connection reaches only what their role does.",
+    inputSchema: object(
+      {
+        email: str("The teammate's email address. It becomes their sign-in."),
+        name: str("Their name, if the person said it."),
+        role: oneOf(MEMBER_ROLES, "RECRUITER, HIRING_MANAGER or INTERVIEWER."),
+        job_ids: { type: "array", items: { type: "string" }, description: "HIRING_MANAGER only: the jobs they see, ids from list_jobs. At least one." },
+      },
+      ["email", "role"],
+    ),
+    annotations: ADD,
+    handler: async (args, ctx) => {
+      const i = await team.inviteTeammate(ctx.userId, { email: need(args, "email"), name: s(args, "name"), role: need(args, "role"), jobIds: list(args, "job_ids") });
+      return { email: i.email, role: i.role, link: `${ctx.baseUrl}${i.path}`, validForDays: i.days };
+    },
+  },
+  {
+    name: "update_teammate",
+    title: "Change or remove a teammate",
+    description:
+      "Change a teammate's role or a hiring manager's jobs, remove a teammate, or withdraw an invite. Owner only. Ids come from list_team. " +
+      "job_ids REPLACES a hiring manager's jobs: send the whole list. " +
+      "remove deletes the teammate's account at once: they're signed out and their assistant's connection stops working. What they wrote (notes, scorecards) stays in the workspace. Say who will lose access and get a yes first.",
+    inputSchema: object({
+      teammate_id: str("The teammate's id, from list_team's members."),
+      invite_id: str("An open invite's id, from list_team's invites, to withdraw it."),
+      role: oneOf(MEMBER_ROLES, "Their new role."),
+      job_ids: { type: "array", items: { type: "string" }, description: "HIRING_MANAGER only: every job they should see, replacing the list." },
+      remove: bool("true removes the teammate (or withdraws the invite)."),
+    }),
+    annotations: REPLACE,
+    handler: async (args, ctx) => {
+      const inviteId = s(args, "invite_id");
+      if (inviteId) {
+        await team.revokeInvite(ctx.userId, inviteId);
+        return { withdrawn: inviteId };
+      }
+      return team.updateTeammate(ctx.userId, need(args, "teammate_id"), { role: s(args, "role"), jobIds: list(args, "job_ids"), remove: args.remove === true });
+    },
   },
 ];
 

@@ -1,5 +1,8 @@
 import Link from "next/link";
-import { baseUrl, requireUser } from "@/lib/auth";
+import { notFound, redirect } from "next/navigation";
+import { baseUrl, requireSeat } from "@/lib/auth";
+import { listTeam, reaches } from "@/lib/data/team";
+import { ROLE_LABEL, seesEverything } from "@/lib/team";
 import { listReferences } from "@/lib/data/references";
 import { getApplication, STAGES, TIERS } from "@/lib/data/applications";
 import { boardByKey } from "@/lib/boards";
@@ -45,11 +48,16 @@ function minutes(ms: number) {
 
 export default async function ApplicationPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const user = await requireUser();
-  const a = await getApplication(user.id, id);
-  const io = await interviewsAndOffers(user.id, id);
-  const refs = await listReferences(user.id, id);
-  const mail = await getMailbox(user.id);
+  const { seat, userId } = await requireSeat();
+  if (seat.panelId) redirect("/interviews");
+  if (!(await reaches(seat, { applicationId: id }))) notFound();
+  // A hiring manager reads, moves, tiers, notes and interviews; messages, offers, references and sharing are for owners and recruiters.
+  const full = seesEverything(seat.role);
+  const a = await getApplication(userId, id);
+  const io = await interviewsAndOffers(userId, id);
+  const refs = await listReferences(userId, id);
+  const mail = await getMailbox(userId);
+  const { members } = await listTeam(userId);
   const base = await baseUrl();
   const latestOffer = io.offers.at(-1);
   const board = a.listing ? `${boardByKey(a.listing.board)?.name ?? a.listing.board} · listing ${a.listing.variant}` : a.source || "added by hand";
@@ -201,6 +209,7 @@ export default async function ApplicationPage({ params }: { params: Promise<{ id
           )}
         </section>
 
+        {full && (
         <section className="card rise p-5 space-y-3" style={{ ["--i" as string]: 4 }}>
           <div className="flex items-center gap-2">
             <h2 className="h-section flex-1">Share</h2>
@@ -223,6 +232,7 @@ export default async function ApplicationPage({ params }: { params: Promise<{ id
             <p className="text-[12.5px] text-rt-muted">A read-only link for a co-founder or hiring manager without an account.</p>
           )}
         </section>
+        )}
       </aside>
 
       <div className="space-y-10 min-w-0 lg:order-1">
@@ -331,6 +341,11 @@ export default async function ApplicationPage({ params }: { params: Promise<{ id
                 {iv.durationMin ? ` · ${iv.durationMin} min` : ""} · {iv.format.replace("_", " ")}
                 {iv.interviewers && ` · with ${iv.interviewers}`}
               </span>
+              {iv.memberIds.length > 0 && (
+                <span className="text-xs text-rt-faint">
+                  Panel: {iv.memberIds.map((mid) => members.find((m) => m.id === mid)).filter(Boolean).map((m) => m!.name || m!.email).join(", ")}
+                </span>
+              )}
             </div>
             {iv.location && (
               <div className="text-xs">
@@ -452,10 +467,25 @@ export default async function ApplicationPage({ params }: { params: Promise<{ id
             </div>
             <input className="field" name="interviewers" placeholder="Who they'll meet" />
             <input className="field" name="location" placeholder="Meeting link or address" />
+            {members.length > 1 && (
+              <fieldset className="space-y-1.5">
+                <legend className="text-[12px] text-rt-muted">Teammates on the panel. An interviewer sees only the interviews they&apos;re on.</legend>
+                <div className="flex flex-wrap gap-x-4 gap-y-1">
+                  {members.map((m) => (
+                    <label key={m.id} className="inline-flex items-center gap-1.5 text-[13px]">
+                      <input type="checkbox" name="memberId" value={m.id} />
+                      {m.name || m.email} <span className="text-rt-faint text-[11.5px]">{ROLE_LABEL[m.role]}</span>
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+            )}
           </ActionForm>
         </details>
       </section>
 
+      {full && (
+      <>
       <section className="space-y-3">
         <div className="flex flex-wrap items-baseline gap-x-3">
           <h2 className="h-section">References</h2>
@@ -660,6 +690,9 @@ export default async function ApplicationPage({ params }: { params: Promise<{ id
         </details>
       </section>
 
+      </>
+      )}
+
       <section className="space-y-3">
         <h2 className="h-section">Notes</h2>
         {a.notes.map((n) => (
@@ -676,6 +709,7 @@ export default async function ApplicationPage({ params }: { params: Promise<{ id
         </ActionForm>
       </section>
 
+      {full && (
       <section className="space-y-2">
         <h2 className="h-section">Their data</h2>
         <p className="text-[12.5px] text-rt-muted">
@@ -686,6 +720,7 @@ export default async function ApplicationPage({ params }: { params: Promise<{ id
           <a className="btn text-xs" href={`/files/applicant/${a.id}`}>
             Download everything about them
           </a>
+          {seat.role === "OWNER" && (
           <details className="text-sm">
             <summary className="btn btn-quiet text-xs cursor-pointer">Delete everything about them</summary>
             <ActionForm action={deleteApplicantAction} submit="Delete for good" className="pt-3">
@@ -697,8 +732,10 @@ export default async function ApplicationPage({ params }: { params: Promise<{ id
               <input className="field" name="confirm" placeholder={a.candidate.name} autoComplete="off" />
             </ActionForm>
           </details>
+          )}
         </div>
       </section>
+      )}
       </div>
       </div>
     </div>

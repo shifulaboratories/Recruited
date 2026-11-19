@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { requireUser } from "@/lib/auth";
+import { redirect } from "next/navigation";
+import { requireSeat } from "@/lib/auth";
 import { listApplications } from "@/lib/data/applications";
 import { boardByKey } from "@/lib/boards";
 import { ProvenanceBar, QualifiedChip, StageChip, TierChip, tierTone } from "@/components/provenance";
@@ -14,8 +15,9 @@ function sourceLabel(source: string) {
 }
 
 export default async function ApplicationsPage() {
-  const user = await requireUser();
-  const { applications, total } = await listApplications(user.id, { limit: 200, sort: "tier" });
+  const { seat, userId } = await requireSeat();
+  if (seat.panelId) redirect("/interviews");
+  const { applications, total } = await listApplications(userId, { limit: 200, sort: "tier", jobIds: seat.jobIds });
   return (
     <div className="space-y-6">
       <PageHeader eyebrow={`Applicants · ${total}`} title="Everyone who applied" sub="Across every role, A tier first. Proposed tiers are striped until you decide." />

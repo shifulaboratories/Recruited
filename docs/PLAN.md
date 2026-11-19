@@ -41,6 +41,8 @@
 
 - Scorecard links (19 Nov): `get_scorecard_link` gives one interviewer a link to fill in their own scorecard without an account (`/score/<token>`, `ScorecardLink`), and the applicant screen makes one too. It shows the applicant, the interview and the rubric, never another interviewer's verdict, and works once. 45 tools, 5 prompts.
 
+- Teams (19 Nov, roadmap items 19 and 20): a workspace is its owner's account, and teammates are accounts with a `Membership` and one of three roles. Recruiter: everything but the team, the company settings, the mailbox and deleting an applicant's data. Hiring manager: only the jobs they're given. Interviewer: only the interviews they're on the panel of (`Interview.memberIds`), and their own scorecard; in the app that's a "Your interviews" page whose button opens their own scorecard page. Invites are one-time links (`invite_teammate`, `/join/<token>`, 7 days), nothing is emailed. Each teammate connects their own Claude, and their connection lists only their role's tools. `list_team`, `update_teammate`. 48 tools, 5 prompts.
+
 ## Next
 
 Everything on the first plan is built. What's worth doing next should come from using it on a real hire.
@@ -63,4 +65,3 @@ Everything on the first plan is built. What's worth doing next should come from 
   take its screens across, or keep growing from this foundation?
 - Which board matters most first? The OnlineJobs.ph guide is the deepest, built from your
   own listing skill.
-- Multi-user workspaces (a team hiring together) are parked, as in Hired. Still right?

@@ -1,11 +1,12 @@
 import { currentUser } from "@/lib/auth";
 import { readUpload } from "@/lib/data/uploads";
 import { UserError } from "@/lib/data/errors";
+import { reach, seatFor } from "@/lib/data/team";
 
 export const dynamic = "force-dynamic";
 
 /**
- * An applicant's file, for the signed-in owner only. Served with its sniffed
+ * An applicant's file, for a signed-in teammate whose role reaches it. Served with its sniffed
  * type, never sniffed again by the browser, and sandboxed so a PDF can't run
  * script on this origin.
  */
@@ -13,7 +14,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const user = await currentUser();
   if (!user) return new Response("Sign in to see this file.", { status: 401 });
   try {
-    const u = await readUpload(user.id, (await params).id);
+    const id = (await params).id;
+    const seat = await seatFor(user);
+    await reach(seat, { uploadId: id });
+    const u = await readUpload(seat.userId, id);
     const bytes = new Uint8Array(u.data);
     // Video players ask for byte ranges to seek, and Safari won't play without them.
     const range = /^bytes=(\d*)-(\d*)$/.exec(request.headers.get("range") ?? "");
