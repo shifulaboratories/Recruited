@@ -11,7 +11,8 @@ export const metadata = { title: "Connect Claude" };
 export default async function SettingsPage() {
   const user = await requireUser();
   const conn = await primaryConnection(user.id);
-  const url = `${await baseUrl()}${mcpPath(conn.token)}`;
+  const origin = await baseUrl();
+  const url = `${origin}${mcpPath(conn.token)}`;
   const sample = await hasSample(user.id);
   const spam = await spamCheckStatus();
   return (
@@ -61,6 +62,19 @@ export default async function SettingsPage() {
             <span className="text-rt-muted">Website</span>
             <input className="field" name="companyWebsite" type="url" placeholder="https://" defaultValue={user.companyWebsite} />
           </label>
+          <label className="block space-y-1">
+            <span className="text-rt-muted">
+              Careers page address: {origin}/careers/<b>{user.careersSlug || "your-company"}</b>. It lists every open job with a live careers listing.
+            </span>
+            <input className="field" name="careersSlug" placeholder="acme" defaultValue={user.careersSlug ?? ""} />
+          </label>
+          {user.careersSlug && (
+            <p className="text-[12.5px]">
+              <a className="text-rt-primary underline" href={`/careers/${user.careersSlug}`} target="_blank" rel="noreferrer">
+                Open your careers page
+              </a>
+            </p>
+          )}
         </ActionForm>
       </section>
 

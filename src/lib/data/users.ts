@@ -42,9 +42,16 @@ export async function ensureOwner(): Promise<{ email: string; password: string }
 
 export async function updateAccount(
   userId: string,
-  input: { name?: string; email?: string; companyName?: string; companyAbout?: string; companyWebsite?: string; password?: string },
+  input: { name?: string; email?: string; companyName?: string; companyAbout?: string; companyWebsite?: string; careersSlug?: string; password?: string },
 ) {
-  const data: Record<string, string> = {};
+  const data: Record<string, string | null> = {};
+  if (input.careersSlug !== undefined) {
+    const c = input.careersSlug.trim().toLowerCase();
+    if (c && !/^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$/.test(c))
+      throw new UserError("The careers address takes lowercase letters, numbers and dashes, up to 40, like acme or acme-labs.");
+    if (c && (await db.user.findFirst({ where: { careersSlug: c, NOT: { id: userId } } }))) throw new UserError("Another workspace on this instance uses that careers address.");
+    data.careersSlug = c || null;
+  }
   if (input.name !== undefined) data.name = input.name.trim();
   if (input.companyName !== undefined) data.companyName = input.companyName.trim();
   if (input.companyAbout !== undefined) {

@@ -29,6 +29,8 @@
 
 - Backups and health (19 Nov): docs/DEPLOY.md says how to back up on Railway (the Postgres service's Backups tab) and with Compose, whose new `backup` service writes a dump a day to `./backups` and keeps 14. Server errors the app catches (a tool failing, a public form failing) are kept in `ErrorEvent`, newest 1000, and the owner reads them with `instance_health`, beside database status, the latest migration and totals. 40 tools, 5 prompts.
 
+- Careers page and Google for Jobs (19 Nov): a new `careers` board. `update_company` takes `careers_slug`, and `/careers/<slug>` lists every open job with a LIVE careers listing. That listing's apply page is the only one search engines may index, and it carries schema.org JobPosting data (`src/lib/job-posting.ts`, pure, tested in rules.test.mjs). Every other apply link stays unlisted.
+
 ## Next
 
 Everything on the first plan is built. What's worth doing next should come from using it on a real hire.

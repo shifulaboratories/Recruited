@@ -17,6 +17,7 @@ import * as users from "@/lib/data/users";
 import * as settings from "@/lib/data/settings";
 import * as system from "@/lib/data/system";
 import { UserError } from "@/lib/data/errors";
+import { careersPath } from "@/lib/data/public";
 import { BOARDS, BOARD_KEYS, boardByKey } from "@/lib/boards";
 import { QUESTION_TYPES } from "@/lib/forms";
 import { MESSAGE_KINDS } from "@/lib/messages";
@@ -932,18 +933,31 @@ export const TOOLS: McpTool[] = [
   },
   {
     name: "update_company",
-    title: "Update the company profile",
+    title: "Update the company profile and careers page",
     description:
-      "The company every public job page shows: its name, a few sentences about it, and its website. Changes only what you send. Write about in plain words from what the person tells you (what you make, who for, how you work), three or four sentences; never invent size, funding or perks.",
+      "The company every public job page shows: its name, a few sentences about it, and its website. Changes only what you send. Write about in plain words from what the person tells you (what you make, who for, how you work), three or four sentences; never invent size, funding or perks. " +
+      "careers_slug sets the careers page's address, /careers/<slug>: a public page listing every open job that has a LIVE listing on the careers board, which is also the only kind of apply page search engines and Google for Jobs may index. Ask the person what they want it called; their company name in lowercase is the usual choice. Empty string takes the page down. " +
+      "Returns the careers page's full URL once a slug is set.",
     inputSchema: object({
       company_name: str("The company's name."),
       about: str("A few sentences about the company, plain text."),
       website: str("Full address, starting with https://. Empty string clears it."),
+      careers_slug: str("Lowercase letters, numbers and dashes, e.g. 'acme'. Empty string takes the careers page down."),
     }),
     annotations: SET,
     handler: async (args, ctx) => {
-      const u = await users.updateAccount(ctx.userId, { companyName: s(args, "company_name"), companyAbout: s(args, "about"), companyWebsite: s(args, "website") });
-      return { companyName: u.companyName, about: u.companyAbout, website: u.companyWebsite };
+      const u = await users.updateAccount(ctx.userId, {
+        companyName: s(args, "company_name"),
+        companyAbout: s(args, "about"),
+        companyWebsite: s(args, "website"),
+        careersSlug: s(args, "careers_slug"),
+      });
+      return {
+        companyName: u.companyName,
+        about: u.companyAbout,
+        website: u.companyWebsite,
+        careersUrl: u.careersSlug ? `${ctx.baseUrl}${careersPath(u.careersSlug)}` : null,
+      };
     },
   },
   {

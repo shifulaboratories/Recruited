@@ -333,6 +333,28 @@ try {
     await db.user.update({ where: { id: a.id }, data: { role: "MEMBER" } });
   });
 
+  await check("the careers page lists only open jobs with a live careers listing, and only that apply page is indexable", async () => {
+    const set = await call("update_company", a, { careers_slug: `probe-${stamp}` });
+    ok(set.careersUrl === `${BASE}/careers/probe-${stamp}`, `careersUrl is ${set.careersUrl}`);
+    await refuses(call("update_company", b, { careers_slug: `probe-${stamp}` }), /Another workspace/);
+    await refuses(call("update_company", b, { careers_slug: "Not A Slug" }), /lowercase/);
+    const open = await call("create_job", a, { title: "Careers Probe Role", status: "OPEN", workplace: "remote", location: "Philippines" });
+    const draftJob = await call("create_job", a, { title: "Careers Draft Role" });
+    const live = await call("create_listing", a, { job_id: open.id, board: "careers", title: "Careers Probe Role", body: "Do the work." });
+    await call("create_listing", a, { job_id: draftJob.id, board: "careers", title: "Careers Draft Role", body: "x" });
+    ok((await publicData.publicCareers(`probe-${stamp}`)).jobs.length === 0, "a DRAFT careers listing shows");
+    await call("update_listing", a, { listing_id: live.id, status: "LIVE" });
+    const page = await publicData.publicCareers(`probe-${stamp}`);
+    ok(page.jobs.length === 1 && page.jobs[0].title === "Careers Probe Role", `careers lists ${JSON.stringify(page.jobs.map((j) => j.title))}`);
+    ok((await publicData.publicListing(live.applyUrl.split("/").pop())).indexable === true, "the live careers listing isn't indexable");
+    ok((await publicData.publicListing(slug)).indexable === false, "an onlinejobs_ph apply link is indexable");
+    await jobsData.archiveJob(a.id, open.id);
+    ok((await publicData.publicCareers(`probe-${stamp}`)).jobs.length === 0, "an archived job still shows on the careers page");
+    await jobsData.archiveJob(a.id, draftJob.id);
+    await call("update_company", a, { careers_slug: "" });
+    ok((await publicData.publicCareers(`probe-${stamp}`)) === null, "the careers page outlived its slug");
+  });
+
   await check("a reset link works once, for its own account, and signs every browser out", async () => {
     const got = await call("get_password_reset_link", b, {});
     ok(got.account === b.email, "the link is for another account");

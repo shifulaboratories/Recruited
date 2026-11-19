@@ -45,6 +45,9 @@ export async function publicListing(listingSlug: string) {
   return {
     open,
     preview: l.status === "DRAFT",
+    /** Only a LIVE careers listing is meant for search engines; every other apply link is unlisted. */
+    indexable: open && l.board === "careers" && l.status === "LIVE",
+    postedAt: l.postedAt ?? l.createdAt,
     company: l.user.companyName,
     companyAbout: l.user.companyAbout,
     companyWebsite: l.user.companyWebsite,
@@ -64,6 +67,46 @@ export async function publicListing(listingSlug: string) {
       salaryPeriod: l.job.salaryPeriod,
     },
     questions: form ? readQuestions(form.questions) : [],
+  };
+}
+
+export function careersPath(careersSlug: string) {
+  return `/careers/${careersSlug}`;
+}
+
+/**
+ * A company's careers page: every open, unarchived job that has a LIVE
+ * listing on the careers board, linked to that listing's apply page. Public,
+ * by the slug the owner chose. It shows the company's own lines and the jobs'
+ * public facts, nothing else.
+ */
+export async function publicCareers(careersSlug: string) {
+  const u = await db.user.findUnique({
+    where: { careersSlug },
+    select: { id: true, companyName: true, companyAbout: true, companyWebsite: true },
+  });
+  if (!u) return null;
+  const jobs = await db.job.findMany({
+    where: { userId: u.id, archivedAt: null, status: "OPEN", listings: { some: { board: "careers", status: "LIVE" } } },
+    orderBy: { createdAt: "desc" },
+    include: { listings: { where: { board: "careers", status: "LIVE" }, orderBy: { variant: "asc" }, take: 1, select: { slug: true, title: true } } },
+  });
+  return {
+    company: u.companyName,
+    companyAbout: u.companyAbout,
+    companyWebsite: u.companyWebsite,
+    jobs: jobs.map((j) => ({
+      title: j.listings[0]!.title,
+      team: j.team,
+      location: j.location,
+      workplace: j.workplace,
+      employmentType: j.employmentType,
+      salaryMin: j.salaryMin,
+      salaryMax: j.salaryMax,
+      salaryCurrency: j.salaryCurrency,
+      salaryPeriod: j.salaryPeriod,
+      applyPath: `/apply/${j.listings[0]!.slug}`,
+    })),
   };
 }
 

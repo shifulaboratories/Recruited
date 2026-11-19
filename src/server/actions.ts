@@ -142,6 +142,7 @@ export async function saveAccount(_: ActionState, form: FormData): Promise<Actio
         companyName: opt("companyName"),
         companyAbout: opt("companyAbout"),
         companyWebsite: opt("companyWebsite"),
+        careersSlug: opt("careersSlug"),
         email: opt("email"),
         password: opt("password") || undefined,
       }).then(() => revalidatePath("/settings")),
