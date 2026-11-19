@@ -1,0 +1,50 @@
+# The gate from CLAUDE.md, on every pull request and every push to main:
+# typecheck, the pure rules, the probe against a throwaway Postgres, and the
+# production build. Railway builds main the moment it lands, so this is the
+# last place a broken change can be stopped before a self-hoster pulls it.
+name: Gate
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: recruited_probe
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # The probe refuses any database whose name doesn't contain "probe".
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/recruited_probe
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run check
+      - run: npx prisma migrate deploy
+      - run: npm run probe
+      - run: npm run build

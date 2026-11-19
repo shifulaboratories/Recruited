@@ -177,3 +177,18 @@ the company profile and the sample workspace. Calls worth remembering:
   contact details, notes, messages and files.
 - The sample workspace marks the Job and Candidates `sample`; wiping deletes
   only those and lets cascades take the rest.
+
+## 2026-11-19 — The probe and the CI gate
+
+- PR #9 merged whole after the probe passed against it (William's call on the
+  roadmap's first open decision); splitting 3,800 lines would have cost more
+  than it caught.
+- `tools/probe.mjs` is ported from Hired's, loading src/ through jiti. Unlike
+  Hired's, it keeps a set of the tools it called and fails when one in `TOOLS`
+  has no case, so coverage can't quietly fall behind the array.
+- The cross-workspace checks only count if the owner could make the same call:
+  each crossing was run once as the owner while writing it, and three that
+  failed on validation instead of the boundary were fixed. Keep that true when
+  adding one.
+- Recruited gets a CI gate where Hired has none, because the roadmap invites
+  design partners and other contributors; Railway still deploys main directly.

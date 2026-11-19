@@ -19,6 +19,8 @@
 - Deploy (17 Nov): `docker/Dockerfile` and `docker-compose.yml` for self-hosting, `railway.json` for Railway, and docs/DEPLOY.md. The image was built and run against an empty database: migrations applied, the owner was printed once, and MCP answered.
 - The twelve (18 Nov), all inside the existing screens: work samples (`task` questions) and short video answers (`video`, recorded with MediaRecorder, stored like files, served with byte ranges); follow-up questions per applicant (`save_probes`, "Ask on the call"); reference checks on a link (`request_reference`, `/ref/<token>`); a daily brief (`daily_brief`, `morning_brief`, Today on the jobs screen); self-booking (`schedule_interview` `offer_times`, `/book/<token>`); closing the loop (`close_out_job`, a card on a filled job); the leading listing in `listing_report` and a badge; company profile and "what happens next" on public pages (`update_company`, `after_apply`); a read-only applicant link (`share_applicant`, `/s/<slug>`); a sample workspace (`load_sample_workspace`, `wipe_sample_workspace`); and a reworked apply form. 37 tools, 5 prompts.
 
+- The probe (19 Nov): `tools/probe.mjs` runs every tool against a real database, checks that another workspace's ids are refused by every tool that takes one, that archived jobs and applications drop out of reads and close the apply page, and that the transport lists every tool and renders every prompt. `.github/workflows/gate.yml` runs typecheck, check, probe and build on every pull request.
+
 ## Next
 
 Everything on the first plan is built. What's worth doing next should come from using it on a real hire.
