@@ -33,6 +33,8 @@
 
 - Your mailbox (19 Nov): Recruited sends from the person's own account over SMTP (`Mailbox`, one per workspace; the password is stored and never read back). `set_mailbox` connects it, signing in before saving, and words the receipt; `send_message` sends a saved draft only after the person said send, to the address on file. Each person who applies through an apply link gets a receipt that says only that it arrived, sent after the response so the applicant never waits on a mail server. A failed send leaves the draft a draft with the reason; 150 sends a day at most. 42 tools, 5 prompts.
 
+- Applicant status page (19 Nov): `/status/<token>`, by the personal token already in each applicant's screening links, shows received, under review or closed, plus the screening forms and interview times waiting on them. It says closed only once a rejection was sent or the job closed, so it never tells an applicant something the team hasn't. The receipt links to it (`{status_link}`), using the address the person saw when they saved their mailbox, never an applicant's Host header. `get_application` and `prep_message` return it as `statusPage`. 42 tools, 5 prompts.
+
 ## Next
 
 Everything on the first plan is built. What's worth doing next should come from using it on a real hire.

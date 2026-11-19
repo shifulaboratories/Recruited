@@ -603,6 +603,10 @@ model Mailbox {
   /// Empty means the built-in wording.
   receiptSubject String    @default("")
   receiptBody    String    @default("")
+  /// This instance's address as the person saw it when they last saved these
+  /// settings, for links inside mail. Never taken from an applicant's request,
+  /// whose Host header they control.
+  siteUrl        String    @default("")
   verifiedAt     DateTime?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt

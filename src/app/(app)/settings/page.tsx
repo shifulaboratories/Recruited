@@ -149,7 +149,7 @@ export default async function SettingsPage() {
                 <span>Send a receipt to everyone who applies</span>
               </label>
               <p className="text-[12.5px] text-rt-faint">
-                Leave these empty for the wording shown. You can use {"{first_name}"}, {"{job}"}, {"{company}"} and {"{sender}"}. A receipt says the
+                Leave these empty for the wording shown. You can use {"{first_name}"}, {"{job}"}, {"{company}"}, {"{sender}"} and {"{status_link}"}, the applicant&apos;s own page showing where their application stands. A receipt says the
                 application arrived; promise a reply only if you mean to keep it.
               </p>
               <input className="field" name="subject" placeholder={mail.defaultReceipt.subject} defaultValue={mail.receipt.subject} />

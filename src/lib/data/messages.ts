@@ -6,6 +6,7 @@ import { readQuestions } from "@/lib/forms";
 import { KIND_GUIDANCE, MESSAGE_KINDS, mailtoLink, type MessageKindName } from "@/lib/messages";
 import { formatOfferPay } from "@/lib/scorecards";
 import { bookingPath } from "@/lib/data/interviews";
+import { statusPath } from "@/lib/applicant-status";
 
 /**
  * Messages to applicants: drafts, and a record of what was sent. Sending from
@@ -62,6 +63,8 @@ export async function prepMessage(userId: string, applicationId: string, kind: s
         asksForFiles: qs.filter((q) => q.type === "file" || q.type === "video").map((q) => q.label),
       };
     }),
+    /** Their own status page. Personal: it goes to this applicant only. */
+    statusPage: `${baseUrl}${statusPath(full.screenToken)}`,
     previous: full.messages,
     /** Scheduled interviews: the only times and people an interview invite may name. */
     interviews: full.interviews.map(({ bookToken, slots, ...i }) => ({

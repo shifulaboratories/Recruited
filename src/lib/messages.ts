@@ -61,16 +61,26 @@ export const MAILTO_SAFE_LENGTH = 1800;
  * one has read it yet. A person may rewrite it; these four placeholders are
  * all it can use.
  */
-export const RECEIPT_PLACEHOLDERS = ["first_name", "job", "company", "sender"] as const;
+export const RECEIPT_PLACEHOLDERS = ["first_name", "job", "company", "sender", "status_link"] as const;
 export const DEFAULT_RECEIPT_SUBJECT = "We have your application for {job}";
 export const DEFAULT_RECEIPT_BODY = `Hi {first_name},
 
 Thanks for applying for {job} at {company}. This is to confirm your application reached us.
 
+You can see where it stands at any time here: {status_link}
+
 {sender}`;
 
+/**
+ * Fill the placeholders. A line whose placeholder has no value is dropped
+ * whole, so a receipt with no status link doesn't end in "here: ".
+ */
 export function renderReceipt(template: string, vars: Record<(typeof RECEIPT_PLACEHOLDERS)[number], string>): string {
+  const known = (key: string): key is keyof typeof vars => (RECEIPT_PLACEHOLDERS as readonly string[]).includes(key);
   return template
+    .split("\n")
+    .filter((line) => ![...line.matchAll(/\{(\w+)\}/g)].some(([, key]) => known(key) && !vars[key]))
+    .join("\n")
     .replace(/\{(\w+)\}/g, (whole, key: string) => ((RECEIPT_PLACEHOLDERS as readonly string[]).includes(key) ? vars[key as keyof typeof vars] : whole))
     .replace(/ +([.,])/g, "$1")
     .replace(/\n{3,}/g, "\n\n")

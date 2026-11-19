@@ -34,6 +34,7 @@ import { ArrivalBar, OriginBadge, ProvenanceBar, QualifiedChip, STAGE_LABEL, STA
 import { Avatar, Icon, SectionHead } from "@/components/ui";
 import { RecordedVideo } from "@/components/video-answer";
 import { getMailbox } from "@/lib/data/mailbox";
+import { statusPath } from "@/lib/applicant-status";
 
 function minutes(ms: number) {
   const m = Math.round(ms / 60000);
@@ -74,6 +75,10 @@ export default async function ApplicationPage({ params }: { params: Promise<{ id
                 {l.replace(/^https?:\/\//, "").slice(0, 40)}
               </a>
             ))}
+            <a className="hover:text-rt-foreground inline-flex items-center gap-1" href={statusPath(a.screenToken)} target="_blank" rel="noreferrer" title="The page this applicant sees about their own application">
+              <Icon name="link" size={12} />
+              Their status page
+            </a>
           </p>
           <p className="text-[12px] text-rt-faint">
             Applied {a.appliedAt.toLocaleDateString("en-US", { month: "short", day: "numeric" })} via {board}

@@ -11,6 +11,7 @@ import { readProbes, ProbesSchema } from "../src/lib/probes.ts";
 import { checkReferenceAnswers, REFERENCE_QUESTIONS } from "../src/lib/references.ts";
 import { bestListing } from "../src/lib/listing-score.ts";
 import { jobPostingLd, ldJson } from "../src/lib/job-posting.ts";
+import { publicStatusOf, STATUS_COPY } from "../src/lib/applicant-status.ts";
 
 const t = (o) => ({ ...EMPTY_TELEMETRY, ...o });
 
@@ -274,4 +275,23 @@ test("the receipt fills its four placeholders and leaves anything else alone", (
 
 test("the built-in receipt promises nothing", () => {
   assert.doesNotMatch(DEFAULT_RECEIPT_BODY + DEFAULT_RECEIPT_SUBJECT, /will (reply|respond|get back|be in touch)|within \d|days?\b/i);
+});
+
+test("a receipt line whose placeholder is empty is dropped whole", () => {
+  const vars = { first_name: "Ana", job: "Bookkeeper", company: "Acme", sender: "Dana", status_link: "" };
+  const body = renderReceipt(DEFAULT_RECEIPT_BODY, vars);
+  assert.doesNotMatch(body, /here:/);
+  assert.match(renderReceipt(DEFAULT_RECEIPT_BODY, { ...vars, status_link: "https://x.test/status/abc" }), /here: https:\/\/x\.test\/status\/abc/);
+});
+
+test("the status page never says closed before the applicant was told", () => {
+  const s = (stage, jobStatus = "OPEN", rejectionSent = false) => publicStatusOf({ stage, jobStatus, rejectionSent });
+  assert.equal(s("NEW"), "received");
+  assert.equal(s("SCREEN"), "in_review");
+  assert.equal(s("REJECTED"), "in_review");
+  assert.equal(s("REJECTED", "OPEN", true), "closed");
+  assert.equal(s("NEW", "CLOSED"), "closed");
+  assert.equal(s("OFFER", "CLOSED"), "in_review");
+  assert.equal(s("HIRED", "CLOSED"), "in_review");
+  for (const c of Object.values(STATUS_COPY)) assert.doesNotMatch(c.text + c.title, /reject|tier|score|rank/i);
 });
