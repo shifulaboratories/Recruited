@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { publicListing } from "@/lib/data/public";
+import { turnstileSiteKey } from "@/lib/data/settings";
 import { formatPay } from "@/lib/data/jobs";
 import { toHtml } from "@/lib/boards";
 import { PublicForm } from "@/components/public-form";
@@ -30,6 +31,7 @@ const PLACE: Record<string, string> = { remote: "Remote", hybrid: "Hybrid", onsi
 export default async function ApplyPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const l = await publicListing(slug);
+  const turnstile = await turnstileSiteKey();
   if (!l) notFound();
   const pay = formatPay(l.job);
   const facts: [string, string][] = (
@@ -116,6 +118,7 @@ export default async function ApplyPage({ params }: { params: Promise<{ slug: st
               doneText={`Thanks for applying${l.company ? ` to ${l.company}` : ""}. A confirmation isn't emailed, so this page is your receipt.`}
               nextSteps={l.afterApply}
               company={l.company}
+              turnstileSiteKey={turnstile}
             />
           ) : (
             <p className="text-rt-muted">This role isn&apos;t taking applications any more.</p>

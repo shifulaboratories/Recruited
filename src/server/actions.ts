@@ -18,6 +18,7 @@ import * as share from "@/lib/data/share";
 import * as closeout from "@/lib/data/closeout";
 import * as sample from "@/lib/data/sample";
 import * as users from "@/lib/data/users";
+import * as settings from "@/lib/data/settings";
 import { updateAccount, userByLogin } from "@/lib/data/users";
 import { overLimit } from "@/lib/data/ratelimit";
 import { UserError } from "@/lib/data/errors";
@@ -75,6 +76,16 @@ export async function resetPassword(_: ActionState, form: FormData): Promise<Act
   if (r?.error) return r;
   await createSession(userId);
   redirect("/jobs");
+}
+
+export async function setSpamCheck(_: ActionState, form: FormData): Promise<ActionState> {
+  const user = await requireUser();
+  const off = form.get("off") === "1";
+  const r = await attempt(async () => {
+    await settings.setTurnstile(user.id, off ? { siteKey: "", secretKey: "" } : { siteKey: String(form.get("siteKey") ?? ""), secretKey: String(form.get("secretKey") ?? "") });
+  }, off ? "Turned off." : "Turned on. Open an apply page to see the check.");
+  revalidatePath("/settings");
+  return r;
 }
 
 export async function logout() {
