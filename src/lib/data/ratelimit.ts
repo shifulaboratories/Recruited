@@ -17,7 +17,7 @@ import { db } from "@/lib/db";
  * The duplicate-email check in submitApplication does the fine-grained work.
  */
 
-export type Route = "apply" | "screen" | "ref" | "book" | "reset";
+export type Route = "apply" | "screen" | "ref" | "book" | "reset" | "score";
 
 /** Posts allowed per hashed address per hour: one limit per form, and one across all of them. */
 export const LIMITS = { perTarget: 20, perAddress: 60 } as const;

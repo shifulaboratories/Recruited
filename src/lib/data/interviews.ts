@@ -160,7 +160,7 @@ export async function listInterviews(userId: string, input: { from?: string; to?
 export async function addScorecard(
   userId: string,
   interviewId: string,
-  input: { interviewer: string; recommendation: string; ratings?: unknown; summary?: string; writtenBy: "app" | "mcp" },
+  input: { interviewer: string; recommendation: string; ratings?: unknown; summary?: string; writtenBy: "app" | "mcp" | "link" },
 ) {
   const i = await requireInterview(userId, interviewId);
   const interviewer = input.interviewer.trim();
@@ -174,6 +174,25 @@ export async function addScorecard(
   // A scorecard means the conversation happened.
   if (i.status === "SCHEDULED") await db.interview.update({ where: { id: i.id }, data: { status: "DONE" } });
   return card;
+}
+
+/** Where an interviewer fills in their scorecard without an account. */
+export function scorecardPath(token: string) {
+  return `/score/${encodeURIComponent(token)}`;
+}
+
+/**
+ * A one-use link for one interviewer to fill in their own scorecard. Asking
+ * again for the same interviewer on the same interview returns the same
+ * unused link rather than minting a second.
+ */
+export async function scorecardLink(userId: string, interviewId: string, interviewer: string) {
+  const i = await requireInterview(userId, interviewId);
+  const name = interviewer.trim().slice(0, 120);
+  if (!name) throw new UserError("Say whose scorecard the link is for.");
+  const open = await db.scorecardLink.findFirst({ where: { userId, interviewId: i.id, interviewer: name, scorecardId: null } });
+  const link = open ?? (await db.scorecardLink.create({ data: { userId, interviewId: i.id, interviewer: name, token: secret("sc") } }));
+  return { interviewer: link.interviewer, path: scorecardPath(link.token) };
 }
 
 export async function deleteScorecard(userId: string, scorecardId: string) {

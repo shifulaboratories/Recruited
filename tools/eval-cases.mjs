@@ -121,6 +121,12 @@ export const CASES = [
     why: "An interviewer's verdict is a scorecard, which the panel view reads.",
   },
   {
+    prompt: "Ana did the second interview with Maria. Can she put her own feedback in?",
+    expect: ["get_scorecard_link", "list_interviews", "list_applications"],
+    avoid: ["record_scorecard"],
+    why: "Ana writes her own card through a link; recording one for her invents her verdict.",
+  },
+  {
     prompt: "Offer Maria 900 a month, start on the 1st.",
     expect: ["record_offer", "list_applications"],
     avoid: ["send_message", "save_message"],

@@ -551,6 +551,26 @@ try {
     await jobsData.archiveJob(a.id, old.id);
   });
 
+  await check("an interviewer's link writes one scorecard, shows no one else's, and dies with the application", async () => {
+    const iv = await db.interview.findFirst({ where: { userId: a.id, application: { archivedAt: null } } });
+    await call("record_scorecard", a, { interview_id: iv.id, interviewer: "Probe Lead", recommendation: "STRONG_NO", summary: "secret-verdict-probe" });
+    const got = await call("get_scorecard_link", a, { interview_id: iv.id, interviewer: "Ana Panel" });
+    const again = await call("get_scorecard_link", a, { interview_id: iv.id, interviewer: "Ana Panel" });
+    ok(got.link === again.link, "asking twice minted a second link");
+    const token = got.link.split("/score/")[1];
+    const page = await publicData.publicScorecard(token);
+    ok(page && page.interviewer === "Ana Panel" && !page.done, "the page didn't open");
+    ok(!/secret-verdict-probe|STRONG_NO|PASTED|@probe\.invalid/.test(JSON.stringify(page)), "the page shows another verdict or private data");
+    await refuses(publicData.submitScorecard(token, { recommendation: "YES", summary: "" }), /another look/);
+    await publicData.submitScorecard(token, { recommendation: "YES", summary: "Clear on reconciliations.", ratings: [{ criterion: "Excel", score: 4 }] });
+    const card = await db.scorecard.findFirst({ where: { interviewId: iv.id, interviewer: "Ana Panel" } });
+    ok(card?.writtenBy === "link" && card.recommendation === "YES", "the scorecard wasn't saved from the link");
+    await refuses(publicData.submitScorecard(token, { recommendation: "NO", summary: "Changed my mind." }), /already in/);
+    ok((await db.scorecard.count({ where: { interviewId: iv.id, interviewer: "Ana Panel" } })) === 1, "a second post wrote a second card");
+    ok((await publicData.publicScorecard(token)).done === true, "the page doesn't say it's done");
+    ok((await publicData.publicScorecard("sc_nobody")) === null, "an unknown token opens a page");
+  });
+
   await check("the careers page lists only open jobs with a live careers listing, and only that apply page is indexable", async () => {
     const set = await call("update_company", a, { careers_slug: `probe-${stamp}` });
     ok(set.careersUrl === `${BASE}/careers/probe-${stamp}`, `careersUrl is ${set.careersUrl}`);
@@ -640,6 +660,7 @@ try {
     ["schedule_interview", { application_id: ids.application_id, title: "x" }],
     ["schedule_interview", { interview_id: ids.interview_id, title: "Taken" }],
     ["record_scorecard", { interview_id: ids.interview_id, interviewer: "Spy", recommendation: "NO" }],
+    ["get_scorecard_link", { interview_id: ids.interview_id, interviewer: "Spy" }],
     ["record_offer", { application_id: ids.application_id, title: "x" }],
     ["record_offer", { offer_id: offer.id, status: "WITHDRAWN" }],
     ["move_stage", { application_id: ids.application_id, stage: "REJECTED" }],

@@ -336,6 +336,18 @@ export async function setInterviewStatus(applicationId: string, interviewId: str
   revalidatePath(`/applications/${applicationId}`);
 }
 
+/** Make an interviewer's scorecard link; the message carries the link to copy. */
+export async function scorecardLinkAction(_: ActionState, form: FormData): Promise<ActionState> {
+  const user = await requireUser();
+  try {
+    const l = await interviews.scorecardLink(user.id, String(form.get("interviewId") ?? ""), String(form.get("interviewer") ?? ""));
+    return { ok: `${await baseUrl()}${l.path}` };
+  } catch (e) {
+    if (e instanceof UserError) return { error: e.message };
+    throw e;
+  }
+}
+
 export async function addScorecardAction(_: ActionState, form: FormData): Promise<ActionState> {
   const user = await requireUser();
   const appId = String(form.get("applicationId") ?? "");
