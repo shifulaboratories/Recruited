@@ -37,6 +37,8 @@
 
 - Applicant data rights (19 Nov): every apply form says who gets the application, how long it's kept and where to write, from the workspace's `retentionMonths` (default 12) and `privacyEmail`, both set with `update_company` or in Settings. A daily sweep deletes applications whose job closed longer ago than that, except hires, and the daily brief warns 30 days ahead; `Job.closedAt` starts the clock. `export_applicant_data` returns everything held about one person, archived applications included, and the applicant screen has it as a download; `delete_applicant_data` removes them for good, as a dry run unless told otherwise. 44 tools, 5 prompts.
 
+- Tool-choice eval (19 Nov): `npm run eval` sends the real tool array and server instructions with each prompt in `tools/eval-cases.mjs` (26 cases, most of them traps: sending instead of drafting, replacing a form without reading it, deleting instead of exporting) and scores the first tool picked. It needs `ANTHROPIC_API_KEY` and isn't in the gate; `npm run check` validates that every case names a real tool. No score recorded yet.
+
 ## Next
 
 Everything on the first plan is built. What's worth doing next should come from using it on a real hire.

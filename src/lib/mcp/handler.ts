@@ -23,7 +23,7 @@ const SERVER_INFO = { name: "recruited", title: "Recruited", version: "0.1.0" };
  * What every client is told on connect. Clients truncate this (Claude Code at
  * about 2KB), so the rules that must never be lost come first.
  */
-function instructions(user: User) {
+export function instructions(user: Pick<User, "companyName" | "name">) {
   return `Recruited is ${user.companyName || user.name || "this person"}'s applicant tracking system: the roles they're hiring for, listings on job boards, application and screening forms, and every applicant. You are connected as them.
 
 Rules that are never optional:

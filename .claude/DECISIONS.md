@@ -333,3 +333,19 @@ the person's own account. Checked on the dev server: a POST with
   it says so, so the person reads it before sending.
 - `delete_applicant_data` defaults to a dry run. The app asks the person to type the
   applicant's name.
+
+## 2026-11-19 — The tool-choice eval, ported from Hired, without its parser or the SDK
+
+`tools/eval-tool-choice.mjs` loads `tools.ts` and `handler.ts` through jiti, as the probe
+does. Prisma doesn't connect until a query runs, so a placeholder `DATABASE_URL` is enough.
+Hired reads tools.ts as text because its tools file can't be imported without a
+database; Recruited's can, so there is no parallel copy of the tool array or of the
+server instructions to drift. `instructions()` in handler.ts is exported for this.
+
+It calls the Messages API with fetch rather than adding `@anthropic-ai/sdk`. Everything
+here sits in `dependencies`, which ship in the image, for a script the app never runs.
+
+The 26 cases target the traps that cost the most in an ATS: anything that sends, deletes or
+replaces. `npm run check` runs it with `--check`, which validates the cases for free and
+fails if one names a tool that no longer exists. No scored run yet: this session had no
+API key. Record the first score here when there is one.
