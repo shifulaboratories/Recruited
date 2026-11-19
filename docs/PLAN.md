@@ -23,6 +23,8 @@
 
 - Flood protection (19 Nov): the public POST routes (apply, screening, reference, booking) allow 20 posts per address per form an hour and 60 across all of them, counted in Postgres as a hash of the address, never the address. The apply and screening forms carry a hidden `trap` field; a post that fills it is answered as a success and saved nowhere. Cloudflare Turnstile, as an optional setting, is the next step. Also fixed `npm run dev`, which failed to compile any page because instrumentation pulled `node:crypto` into the edge bundle.
 
+- Password reset (19 Nov): `get_password_reset_link` gives the connected person a one-time link to their own account, and "Forgot your password?" on the sign-in page prints one to the server log, since the server sends no mail. Links last an hour, work once, are stored only as a hash, and signing in through one ends every other session. 38 tools, 5 prompts.
+
 ## Next
 
 Everything on the first plan is built. What's worth doing next should come from using it on a real hire.

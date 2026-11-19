@@ -3,9 +3,10 @@ import { db } from "@/lib/db";
 
 /**
  * Per-address limits on the public POST routes (apply, screening, reference,
- * booking). Instance-level, so no userId: it holds no content and nothing in
- * it is anyone's workspace. The address is hashed with the route before it is
- * stored, so the table can't be read back into a list of who applied.
+ * booking) and on asking for a password reset. Instance-level, so no userId:
+ * it holds no content and nothing in it is anyone's workspace. The address is
+ * hashed with the route before it is stored, so the table can't be read back
+ * into a list of who applied.
  *
  * Counted in Postgres, not memory, so the limit holds across restarts and
  * replicas, the same reason the MCP transport keeps no state.
@@ -16,7 +17,7 @@ import { db } from "@/lib/db";
  * The duplicate-email check in submitApplication does the fine-grained work.
  */
 
-export type Route = "apply" | "screen" | "ref" | "book";
+export type Route = "apply" | "screen" | "ref" | "book" | "reset";
 
 /** Posts allowed per hashed address per hour: one limit per form, and one across all of them. */
 export const LIMITS = { perTarget: 20, perAddress: 60 } as const;

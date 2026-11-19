@@ -45,6 +45,7 @@ const { TOOLS, PROMPTS } = await load("mcp/tools.ts");
 const { handleMcpPost } = await load("mcp/handler.ts");
 const { handlePublicSubmit } = await load("public-submit.ts");
 const ratelimit = await load("data/ratelimit.ts");
+const usersData = await load("data/users.ts");
 
 const BASE = "http://probe.invalid";
 const called = new Set();
@@ -298,6 +299,29 @@ try {
     ok((await db.job.count({ where: { userId: b.id, sample: true } })) === 1, "no sample job");
     await call("wipe_sample_workspace", b, {});
     ok((await db.job.count({ where: { userId: b.id } })) === 0, "the wipe left a job behind");
+  });
+
+  await check("a reset link works once, for its own account, and signs every browser out", async () => {
+    const got = await call("get_password_reset_link", b, {});
+    ok(got.account === b.email, "the link is for another account");
+    const token = got.url.split("/reset/")[1];
+    await db.session.create({ data: { token: `sess-${stamp}`, userId: b.id, expiresAt: new Date(Date.now() + 86400_000) } });
+    await refuses(usersData.resetPassword(token, "short"), /10 characters/);
+    ok(await usersData.resetIsUsable(token), "a refused password spent the link");
+    await usersData.resetPassword(token, "a-long-new-password");
+    ok(await usersData.userByLogin(b.email, "a-long-new-password"), "the new password doesn't sign in");
+    ok((await db.session.count({ where: { userId: b.id } })) === 0, "a session survived the reset");
+    await refuses(usersData.resetPassword(token, "another-long-password"), /expired or was already used/);
+    const aBefore = (await db.user.findUnique({ where: { id: a.id } })).passwordHash;
+    ok(aBefore === "x", "another account's password changed");
+    ok((await db.passwordReset.findFirst({ where: { tokenHash: token } })) === null, "the raw token is stored");
+  });
+  await check("an expired reset link is refused, and an unknown email mints nothing", async () => {
+    const { token } = await usersData.resetLinkFor(a.id);
+    await db.passwordReset.updateMany({ where: { userId: a.id }, data: { expiresAt: new Date(Date.now() - 1000) } });
+    ok(!(await usersData.resetIsUsable(token)), "an expired link shows as usable");
+    await refuses(usersData.resetPassword(token, "a-long-new-password"), /expired/);
+    ok((await usersData.resetLinkForEmail(`nobody-${stamp}@probe.invalid`)) === null, "a link for nobody");
   });
 
   await check("closing out a job is a dry run until asked", async () => {

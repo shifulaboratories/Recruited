@@ -945,6 +945,20 @@ export const TOOLS: McpTool[] = [
     },
   },
   {
+    name: "get_password_reset_link",
+    title: "Get a link to reset the password",
+    description:
+      "Reach for this when the person can't sign in to the Recruited app: they forgot their password, or never saw the one printed when the instance started. " +
+      "Returns a one-time link for the account this connection belongs to, and only that account. It works once, for an hour; setting a new password through it signs every browser out. " +
+      "Give the person the link and nothing else; don't post it anywhere shared, because whoever opens it can set the password. Nothing is emailed.",
+    inputSchema: object({}),
+    annotations: ADD,
+    handler: async (_args, ctx) => {
+      const r = await users.resetLinkFor(ctx.userId);
+      return { url: `${ctx.baseUrl}${users.resetPath(r.token)}`, account: ctx.user.email, validForMinutes: r.minutes };
+    },
+  },
+  {
     name: "load_sample_workspace",
     title: "Load the sample workspace",
     description:

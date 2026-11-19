@@ -3,7 +3,8 @@
 import type { JobStatus, ListingStatus, Stage, Tier } from "@prisma/client";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { createSession, destroySession, requireUser } from "@/lib/auth";
+import { baseUrl, createSession, destroySession, requireUser } from "@/lib/auth";
+import { headers } from "next/headers";
 import * as jobs from "@/lib/data/jobs";
 import * as listings from "@/lib/data/listings";
 import * as applications from "@/lib/data/applications";
@@ -16,7 +17,9 @@ import * as references from "@/lib/data/references";
 import * as share from "@/lib/data/share";
 import * as closeout from "@/lib/data/closeout";
 import * as sample from "@/lib/data/sample";
+import * as users from "@/lib/data/users";
 import { updateAccount, userByLogin } from "@/lib/data/users";
+import { overLimit } from "@/lib/data/ratelimit";
 import { UserError } from "@/lib/data/errors";
 
 /**
@@ -41,6 +44,36 @@ export async function login(_: ActionState, form: FormData): Promise<ActionState
   const user = await userByLogin(String(form.get("email") ?? ""), String(form.get("password") ?? ""));
   if (!user) return { error: "That email and password don't match an account." };
   await createSession(user.id);
+  redirect("/jobs");
+}
+
+/**
+ * "Forgot your password?" This server sends no mail, so the link goes to the
+ * server log, where whoever runs the instance reads it. The answer is the
+ * same whether or not the address has an account.
+ */
+export async function forgotPassword(_: ActionState, form: FormData): Promise<ActionState> {
+  const h = await headers();
+  const request = new Request("http://local/reset", { headers: h });
+  const email = String(form.get("email") ?? "").slice(0, 320);
+  if (!(await overLimit(request, "reset", "forgot"))) {
+    const r = email.trim() ? await users.resetLinkForEmail(email) : null;
+    if (r) console.log(`\n  Password reset for ${r.email}, valid for ${r.minutes} minutes:\n    ${await baseUrl()}${users.resetPath(r.token)}\n`);
+  }
+  return {
+    ok: "If that address has an account, a reset link is now in the server's log. Or ask Claude: it can give you one while it's connected.",
+  };
+}
+
+export async function resetPassword(_: ActionState, form: FormData): Promise<ActionState> {
+  const password = String(form.get("password") ?? "");
+  if (password !== String(form.get("confirm") ?? "")) return { error: "The two passwords don't match." };
+  let userId = "";
+  const r = await attempt(async () => {
+    userId = (await users.resetPassword(String(form.get("token") ?? ""), password)).userId;
+  });
+  if (r?.error) return r;
+  await createSession(userId);
   redirect("/jobs");
 }
 
