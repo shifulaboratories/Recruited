@@ -24,7 +24,7 @@ A feature is done when an assistant connected over MCP can do it end to end. Ord
 1. **Tenant isolation.** Every function in `src/lib/data/` that touches content takes
    `userId` first and filters on it. Server actions resolve the caller from the session;
    MCP tools from the connection token. The public paths (`/apply/<slug>`,
-   `/f/<slug>?t=`, `/ref/<token>`, `/book/<token>`, `/s/<slug>`) live in
+   `/f/<slug>?t=`, `/ref/<token>`, `/book/<token>`, `/s/<slug>`, `/careers/<slug>`) live in
    `src/lib/data/public.ts`, resolve the owner from the row the slug names, and return
    only what the page shows. `/s/` is the one that shows answers, and only after the
    owner turned the link on; it never shows email, phone, notes or files.
@@ -54,7 +54,8 @@ src/lib/mcp/tools.ts        Every tool and prompt.
 src/lib/mcp/handler.ts      Transport and the server instructions.
 src/components/public-form.tsx  The apply/screening form and its recorder.
 src/app/(app)/              Jobs, applicants, one applicant, Connect Claude.
-src/app/apply/, f/, ref/, book/, s/  The public pages.
+src/app/apply/, f/, ref/, book/, s/, careers/  The public pages. Only /careers/ and a LIVE
+                            careers-board apply page may be indexed; every other link is unlisted.
 brand/                      The brand kit. Colours come from brand/tokens/tokens.css only.
 docs/PLAN.md                What's built, what's next, open questions.
 .claude/DECISIONS.md        Append-only decision log, newest at the bottom.

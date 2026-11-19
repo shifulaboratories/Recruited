@@ -10,6 +10,7 @@ import { panelView, offerChanges, readRatings, formatOfferPay } from "../src/lib
 import { readProbes, ProbesSchema } from "../src/lib/probes.ts";
 import { checkReferenceAnswers, REFERENCE_QUESTIONS } from "../src/lib/references.ts";
 import { bestListing } from "../src/lib/listing-score.ts";
+import { jobPostingLd, ldJson } from "../src/lib/job-posting.ts";
 
 const t = (o) => ({ ...EMPTY_TELEMETRY, ...o });
 
@@ -219,4 +220,44 @@ test("listing score: judged on A-tier, cautious on small numbers", () => {
   assert.equal(b.confident, true);
   assert.equal(bestListing([row("A", 3, 1, 1, 60), row("B", 2, 1, 2, 30)]).listingId, "B");
   assert.equal(bestListing([row("A", 3, 1, 1, 60), row("B", 2, 1, 2, 30)]).confident, false);
+});
+
+// --- JobPosting for Google for Jobs -------------------------------------------
+
+const posting = {
+  title: "Operations Virtual Assistant",
+  descriptionHtml: "<p>Run the inbox</p>",
+  postedAt: new Date("2026-11-19T10:00:00Z"),
+  url: "https://app.example/apply/abc",
+  company: "Acme",
+  companyWebsite: "https://acme.example",
+  location: "Philippines",
+  workplace: "remote",
+  employmentType: "full_time",
+  salaryMin: 800,
+  salaryMax: 1100,
+  salaryCurrency: "USD",
+  salaryPeriod: "month",
+};
+
+test("a remote job is TELECOMMUTE with the country as an applicant requirement", () => {
+  const ld = jobPostingLd(posting);
+  assert.equal(ld.jobLocationType, "TELECOMMUTE");
+  assert.deepEqual(ld.applicantLocationRequirements, { "@type": "Country", name: "Philippines" });
+  assert.equal(ld.jobLocation, undefined);
+  assert.equal(ld.employmentType, "FULL_TIME");
+  assert.equal(ld.datePosted, "2026-11-19");
+  assert.deepEqual(ld.baseSalary.value, { "@type": "QuantitativeValue", minValue: 800, maxValue: 1100, unitText: "MONTH" });
+});
+
+test("an onsite job has a place, and missing pay is left out rather than guessed", () => {
+  const ld = jobPostingLd({ ...posting, workplace: "onsite", location: "Manila", salaryMin: null, salaryMax: null });
+  assert.equal(ld.jobLocationType, undefined);
+  assert.equal(ld.jobLocation.address.addressLocality, "Manila");
+  assert.equal(ld.baseSalary, undefined);
+});
+
+test("the JSON can't close its script tag", () => {
+  const out = ldJson(jobPostingLd({ ...posting, descriptionHtml: "</script><script>alert(1)</script>" }));
+  assert.ok(!out.includes("</script>"));
 });

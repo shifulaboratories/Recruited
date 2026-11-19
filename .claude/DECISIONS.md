@@ -252,3 +252,16 @@ the company profile and the sample workspace. Calls worth remembering:
   reads them and only through `instance_health`.
 - No screen for health yet: it's a question you ask Claude when something
   breaks. Add one if real use asks for it.
+
+## 2026-11-19 — Careers page and JobPosting
+
+- The careers page is a board (`careers`), not a new model: each job reaches
+  it through a listing like any board, so attribution, split tests and
+  listing_report keep working, and "careers page" shows up as a source.
+- Only a LIVE careers listing's apply page is indexable and carries
+  JobPosting. Every other apply link stays noindex, so Google never sees one
+  job five times and per-board attribution isn't polluted by search traffic.
+- The careers address is a slug on User, unique per instance, set by the
+  person. No default: a page shouldn't go public until someone names it.
+- JobPosting leaves out anything not entered (no pay range, no baseSalary)
+  rather than guessing, in line with the no-fabrication rule.

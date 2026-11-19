@@ -1,6 +1,8 @@
 import { notFound } from "next/navigation";
 import { publicListing } from "@/lib/data/public";
 import { turnstileSiteKey } from "@/lib/data/settings";
+import { jobPostingLd, ldJson } from "@/lib/job-posting";
+import { baseUrl } from "@/lib/auth";
 import { formatPay } from "@/lib/data/jobs";
 import { toHtml } from "@/lib/boards";
 import { PublicForm } from "@/components/public-form";
@@ -16,7 +18,8 @@ export const dynamic = "force-dynamic";
  */
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
   const l = await publicListing((await params).slug);
-  return { title: l ? `${l.title}${l.company ? ` at ${l.company}` : ""}` : "Not found", robots: { index: false } };
+  // Every apply link is unlisted except a LIVE careers listing, which is the one meant for Google.
+  return { title: l ? `${l.title}${l.company ? ` at ${l.company}` : ""}` : "Not found", robots: { index: !!l?.indexable } };
 }
 
 const TYPE: Record<string, string> = {
@@ -44,6 +47,23 @@ export default async function ApplyPage({ params }: { params: Promise<{ slug: st
   ).filter(([, v]) => v);
   const initial = (l.company || l.title).trim()[0]?.toUpperCase() ?? "R";
   const site = l.companyWebsite?.replace(/^https?:\/\//, "").replace(/\/$/, "");
+  const ld = l.indexable
+    ? jobPostingLd({
+        title: l.title,
+        descriptionHtml: toHtml(l.body || l.title),
+        postedAt: l.postedAt,
+        url: `${await baseUrl()}/apply/${slug}`,
+        company: l.company,
+        companyWebsite: l.companyWebsite,
+        location: l.job.location,
+        workplace: l.job.workplace,
+        employmentType: l.job.employmentType,
+        salaryMin: l.job.salaryMin,
+        salaryMax: l.job.salaryMax,
+        salaryCurrency: l.job.salaryCurrency,
+        salaryPeriod: l.job.salaryPeriod,
+      })
+    : null;
 
   return (
     <div className="min-h-screen">
@@ -55,6 +75,7 @@ export default async function ApplyPage({ params }: { params: Promise<{ slug: st
             "radial-gradient(60% 80% at 20% 0%, color-mix(in oklch, var(--rt-primary) 13%, transparent), transparent 70%), radial-gradient(40% 60% at 90% 10%, color-mix(in oklch, var(--rt-ai) 8%, transparent), transparent 70%)",
         }}
       />
+      {ld && <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: ldJson(ld) }} />}
       <main className="max-w-[720px] mx-auto px-4 py-10 md:py-16 space-y-8">
         {l.preview && <p className="text-xs text-rt-muted inset p-2.5 text-center">Preview: this listing is still a draft. Applications sent now are kept.</p>}
 

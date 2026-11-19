@@ -27,6 +27,8 @@ model User {
   /// A few sentences about the company, shown on every public job page.
   companyAbout   String   @default("")
   companyWebsite String   @default("")
+  /// The public careers page's address, /careers/<careersSlug>. Null until set.
+  careersSlug    String?  @unique
   passwordHash   String
   role           UserRole @default(MEMBER)
   createdAt      DateTime @default(now())
@@ -144,7 +146,7 @@ model Listing {
   id          String        @id @default(cuid())
   userId      String
   jobId       String
-  /// A key from src/lib/boards.ts: linkedin, indeed, onlinejobs_ph, wellfound, upwork, generic.
+  /// A key from src/lib/boards.ts: linkedin, indeed, onlinejobs_ph, wellfound, upwork, careers, generic.
   board       String
   /// "A", "B", … — unique per job and board.
   variant     String        @default("A")
