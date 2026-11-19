@@ -310,3 +310,26 @@ the signed-in person saves mailbox settings, and never comes from the applicant'
 the apply POST's Host and X-Forwarded-Host are theirs to forge, and a receipt is mail from
 the person's own account. Checked on the dev server: a POST with
 `X-Forwarded-Host: evil.example` still produced a localhost link.
+
+## 2026-11-19 — Applicant data rights: a notice, a clock, an export, a delete
+
+- A notice, not a checkbox. Hiring rests on the employer's legitimate interest more often
+  than on consent, and a checkbox adds friction without adding a right. The notice says
+  who gets the application, how long it's kept and where to write, and the retention
+  sentence is generated from the same setting the sweep enforces (`src/lib/privacy.ts`),
+  so it can't drift from what happens.
+- The clock starts at `Job.closedAt`, a new column. `updatedAt` would have restarted
+  whenever someone edited a closed job. Existing closed jobs were backfilled from
+  `updatedAt`, which only errs toward keeping data longer. Reopening a job stops the
+  clock.
+- The sweep is the one thing that deletes without being asked each time. The person
+  chose the period, the default is 12 months, hires are never swept, and `daily_brief`
+  shows what goes in the next 30 days. It runs from `instrumentation.ts`, a minute
+  after start and then daily. It is idempotent, so replicas or restarts do no harm.
+- Export and delete read archived rows on purpose: archiving keeps data in the database,
+  and a data request covers what is stored, not what is shown. CLAUDE.md invariant 8 now
+  names this file as the exception. The export leaves out referees' own contact details
+  (theirs, not the applicant's) and keeps notes and scorecards (about the applicant), and
+  it says so, so the person reads it before sending.
+- `delete_applicant_data` defaults to a dry run. The app asks the person to type the
+  applicant's name.

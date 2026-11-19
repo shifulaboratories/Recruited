@@ -35,6 +35,8 @@
 
 - Applicant status page (19 Nov): `/status/<token>`, by the personal token already in each applicant's screening links, shows received, under review or closed, plus the screening forms and interview times waiting on them. It says closed only once a rejection was sent or the job closed, so it never tells an applicant something the team hasn't. The receipt links to it (`{status_link}`), using the address the person saw when they saved their mailbox, never an applicant's Host header. `get_application` and `prep_message` return it as `statusPage`. 42 tools, 5 prompts.
 
+- Applicant data rights (19 Nov): every apply form says who gets the application, how long it's kept and where to write, from the workspace's `retentionMonths` (default 12) and `privacyEmail`, both set with `update_company` or in Settings. A daily sweep deletes applications whose job closed longer ago than that, except hires, and the daily brief warns 30 days ahead; `Job.closedAt` starts the clock. `export_applicant_data` returns everything held about one person, archived applications included, and the applicant screen has it as a download; `delete_applicant_data` removes them for good, as a dry run unless told otherwise. 44 tools, 5 prompts.
+
 ## Next
 
 Everything on the first plan is built. What's worth doing next should come from using it on a real hire.

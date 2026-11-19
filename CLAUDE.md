@@ -42,7 +42,9 @@ A feature is done when an assistant connected over MCP can do it end to end. Ord
    automatically. The form tells applicants what it records. Keep all of that true.
 7. **No fabrication.** Tools that write listings or forms tell the assistant to ask rather
    than invent pay, hours or must-haves.
-8. **Archiving.** Job and Application carry `archivedAt`; every read excludes archived rows.
+8. **Archiving.** Job and Application carry `archivedAt`; every read excludes archived rows,
+   except in `src/lib/data/privacy.ts`, where a data request and a deletion must cover
+   everything still stored.
 
 ## The map
 

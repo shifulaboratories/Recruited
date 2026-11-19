@@ -19,19 +19,24 @@ enum UserRole {
 }
 
 model User {
-  id             String   @id @default(cuid())
-  email          String   @unique
-  name           String   @default("")
+  id              String   @id @default(cuid())
+  email           String   @unique
+  name            String   @default("")
   /// The company the person hires for. Shown on every public apply page.
-  companyName    String   @default("")
+  companyName     String   @default("")
   /// A few sentences about the company, shown on every public job page.
-  companyAbout   String   @default("")
-  companyWebsite String   @default("")
+  companyAbout    String   @default("")
+  companyWebsite  String   @default("")
   /// The public careers page's address, /careers/<careersSlug>. Null until set.
-  careersSlug    String?  @unique
-  passwordHash   String
-  role           UserRole @default(MEMBER)
-  createdAt      DateTime @default(now())
+  careersSlug     String?  @unique
+  /// Months an applicant's data is kept after their role closes, then deleted.
+  /// Hires are kept. 0 keeps everything until someone deletes it.
+  retentionMonths Int      @default(12)
+  /// Where applicants write to see or delete their data. Shown on every apply form.
+  privacyEmail    String   @default("")
+  passwordHash    String
+  role            UserRole @default(MEMBER)
+  createdAt       DateTime @default(now())
 
   sessions     Session[]
   resets       PasswordReset[]
@@ -117,6 +122,8 @@ model Job {
   /// What makes an A, B or C applicant for this role, in the hiring person's words. Read by rank_applicants.
   rubric         String    @default("")
   status         JobStatus @default(DRAFT)
+  /// When the job last became CLOSED. The retention clock starts here.
+  closedAt       DateTime?
   /// What applicants are told happens after they apply, shown on the thank-you page. Empty uses the default.
   afterApply     String    @default("")
   /// Part of the demo workspace (load_sample_workspace). wipe_sample_workspace deletes only these.
@@ -556,9 +563,9 @@ model Reference {
 /// only a SHA-256 of it with the route, and rows older than a day are
 /// cleared on the next post.
 model RateHit {
-  key       String
-  window    DateTime
-  count     Int      @default(1)
+  key    String
+  window DateTime
+  count  Int      @default(1)
 
   @@id([key, window])
   @@index([window])

@@ -12,6 +12,7 @@ import { checkReferenceAnswers, REFERENCE_QUESTIONS } from "../src/lib/reference
 import { bestListing } from "../src/lib/listing-score.ts";
 import { jobPostingLd, ldJson } from "../src/lib/job-posting.ts";
 import { publicStatusOf, STATUS_COPY } from "../src/lib/applicant-status.ts";
+import { privacyNotice, retentionSentence } from "../src/lib/privacy.ts";
 
 const t = (o) => ({ ...EMPTY_TELEMETRY, ...o });
 
@@ -294,4 +295,15 @@ test("the status page never says closed before the applicant was told", () => {
   assert.equal(s("OFFER", "CLOSED"), "in_review");
   assert.equal(s("HIRED", "CLOSED"), "in_review");
   for (const c of Object.values(STATUS_COPY)) assert.doesNotMatch(c.text + c.title, /reject|tier|score|rank/i);
+});
+
+test("the privacy notice says who, how long and where to write", () => {
+  assert.equal(retentionSentence(12), "They keep it for 1 year after this role closes, then it's deleted, unless they hire you.");
+  assert.match(retentionSentence(24), /2 years/);
+  assert.match(retentionSentence(6), /6 months/);
+  assert.match(retentionSentence(0), /until they delete it/);
+  const n = privacyNotice({ company: "Acme", retentionMonths: 12, contactEmail: "privacy@acme.test" });
+  assert.match(n, /^Your application goes to Acme and no one else\./);
+  assert.match(n, /email privacy@acme\.test\.$/);
+  assert.match(privacyNotice({ company: "", retentionMonths: 12, contactEmail: "" }), /reply to any email they send you/);
 });

@@ -1,5 +1,6 @@
 import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
+import { retentionDue } from "@/lib/data/privacy";
 import { UserError } from "@/lib/data/errors";
 import { readProbes } from "@/lib/probes";
 
@@ -102,5 +103,11 @@ export async function dailyBrief(userId: string, opts: { since?: string; now?: D
     offersOut: { count: offers.length, items: offers.map((o) => ({ offerId: o.id, version: o.version, respondBy: o.respondBy, ...app(o.application) })) },
   };
   const quiet = [brief.newApplicants, brief.proposalsToDecide, brief.screeningNotAnswered, brief.interviewsNext48h, brief.waitingForApplicantToPickATime, brief.scorecardsMissing, brief.unsentDrafts, brief.referencesAnswered, brief.offersOut].every((x) => x.count === 0);
-  return { ...brief, nothingNeedsYou: quiet };
+  const retention = await retentionDue(userId, 30);
+  return {
+    ...brief,
+    /** Applications the retention period deletes in the next 30 days. Shown only when there are some. */
+    ...(retention.dueSoon ? { deletedWithin30Days: { count: retention.dueSoon, retentionMonths: retention.months } } : {}),
+    nothingNeedsYou: quiet,
+  };
 }

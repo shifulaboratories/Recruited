@@ -11,6 +11,7 @@ import {
   addInterviewAction,
   addNote,
   addScorecardAction,
+  deleteApplicantAction,
   deleteMessageDraft,
   deleteReferenceAction,
   offerTimesAction,
@@ -660,6 +661,30 @@ export default async function ApplicationPage({ params }: { params: Promise<{ id
           <input type="hidden" name="applicationId" value={a.id} />
           <textarea className="field min-h-20" name="body" placeholder="A call summary, a reference, why you moved them." />
         </ActionForm>
+      </section>
+
+      <section className="space-y-2">
+        <h2 className="h-section">Their data</h2>
+        <p className="text-[12.5px] text-rt-muted">
+          If {a.candidate.name.split(/\s+/)[0]} asks what you hold about them, download it. It includes your notes and scorecards, so read it
+          before you send it on.
+        </p>
+        <div className="flex flex-wrap items-start gap-2">
+          <a className="btn text-xs" href={`/files/applicant/${a.id}`}>
+            Download everything about them
+          </a>
+          <details className="text-sm">
+            <summary className="btn btn-quiet text-xs cursor-pointer">Delete everything about them</summary>
+            <ActionForm action={deleteApplicantAction} submit="Delete for good" className="pt-3">
+              <input type="hidden" name="applicationId" value={a.id} />
+              <p className="text-[12.5px] text-rt-muted">
+                This deletes {a.candidate.name} and everything about them in this workspace: every application, answer, file, message, note,
+                interview, offer and reference. It can&apos;t be undone. Type their name to confirm.
+              </p>
+              <input className="field" name="confirm" placeholder={a.candidate.name} autoComplete="off" />
+            </ActionForm>
+          </details>
+        </div>
       </section>
       </div>
       </div>

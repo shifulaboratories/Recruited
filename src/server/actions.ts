@@ -11,6 +11,7 @@ import * as applications from "@/lib/data/applications";
 import * as connections from "@/lib/data/connections";
 import * as messages from "@/lib/data/messages";
 import * as mailbox from "@/lib/data/mailbox";
+import * as privacy from "@/lib/data/privacy";
 import * as imports from "@/lib/data/imports";
 import * as interviews from "@/lib/data/interviews";
 import * as probes from "@/lib/data/probes";
@@ -146,7 +147,16 @@ export async function saveAccount(_: ActionState, form: FormData): Promise<Actio
         careersSlug: opt("careersSlug"),
         email: opt("email"),
         password: opt("password") || undefined,
-      }).then(() => revalidatePath("/settings")),
+      })
+        .then(() =>
+          form.has("retentionMonths") || form.has("privacyEmail")
+            ? privacy.setRetention(user.id, {
+                months: form.has("retentionMonths") ? Number(form.get("retentionMonths")) : undefined,
+                privacyEmail: opt("privacyEmail"),
+              })
+            : null,
+        )
+        .then(() => revalidatePath("/settings")),
     "Saved.",
   );
 }
@@ -227,6 +237,20 @@ export async function connectMailboxAction(_: ActionState, form: FormData): Prom
   );
   revalidatePath("/settings");
   return r;
+}
+
+/** Delete everything about one applicant. The typed name is the confirmation. */
+export async function deleteApplicantAction(_: ActionState, form: FormData): Promise<ActionState> {
+  const user = await requireUser();
+  const id = String(form.get("applicationId") ?? "");
+  const r = await attempt(async () => {
+    const preview = await privacy.deleteApplicantData(user.id, { applicationId: id }, true);
+    if (!preview.wouldDelete || String(form.get("confirm") ?? "").trim().toLowerCase() !== preview.wouldDelete.name.trim().toLowerCase())
+      throw new UserError("Type their name exactly as shown to confirm.");
+    await privacy.deleteApplicantData(user.id, { applicationId: id }, false);
+  });
+  if (r?.error) return r;
+  redirect("/applications");
 }
 
 export async function disconnectMailboxAction() {
