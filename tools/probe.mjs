@@ -43,6 +43,8 @@ const appsData = await load("data/applications.ts");
 const publicData = await load("data/public.ts");
 const { TOOLS, PROMPTS } = await load("mcp/tools.ts");
 const { handleMcpPost } = await load("mcp/handler.ts");
+const { handlePublicSubmit } = await load("public-submit.ts");
+const ratelimit = await load("data/ratelimit.ts");
 
 const BASE = "http://probe.invalid";
 const called = new Set();
@@ -168,6 +170,30 @@ try {
       publicData.submitApplication(slug, { name: "No Answers", email: `none-${stamp}@probe.invalid`, answers: {}, telemetry: {}, recorded: false, durationMs: 0 }),
       /another look/,
     );
+  });
+
+  const post = (body, address) =>
+    handlePublicSubmit(
+      new Request(`${BASE}/api/apply/${slug}`, { method: "POST", headers: { "content-type": "application/json", "x-forwarded-for": `10.9.9.${Math.floor(Math.random() * 250)}, ${address}` }, body: JSON.stringify(body) }),
+      "apply",
+      slug,
+      (p) => publicData.submitApplication(slug, p),
+    );
+  await check("a post that fills the hidden trap field is answered ok and saved nowhere", async () => {
+    const before = await db.application.count({ where: { userId: a.id } });
+    const res = await post({ ...payload("Bot Probe", `bot-${stamp}@probe.invalid`, "Yes"), files: undefined, trap: "http://spam.invalid" }, `198.51.100.${stamp.length}`);
+    ok(res.status === 200, `status ${res.status}`);
+    ok((await db.application.count({ where: { userId: a.id } })) === before, "the trapped post saved an application");
+  });
+  await check("one address is held to the hourly limit, and its address is stored only as a hash", async () => {
+    const address = `203.0.113.${(Date.now() % 200) + 1}`;
+    let last;
+    for (let i = 0; i <= ratelimit.LIMITS.perTarget; i++) last = await post({ name: "", email: "", answers: {} }, address);
+    ok(last.status === 429, `post ${ratelimit.LIMITS.perTarget + 1} got ${last.status}`);
+    const other = await post({ name: "", email: "", answers: {} }, "192.0.2.77");
+    ok(other.status !== 429, "a different address was limited too");
+    const leaked = await db.$queryRaw`SELECT 1 FROM "RateHit" WHERE "key" LIKE ${"%" + address + "%"}`;
+    ok(leaked.length === 0, "the raw address is in RateHit");
   });
 
   // --- Every tool, once, on that workspace -----------------------------------
@@ -379,6 +405,7 @@ try {
 } catch (error) {
   failures.push(`setup: ${error instanceof Error ? error.stack : String(error)}`);
 } finally {
+  await db.rateHit.deleteMany({});
   await db.user.deleteMany({ where: { id: { in: made } } });
   await db.$disconnect();
 }

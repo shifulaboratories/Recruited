@@ -192,3 +192,21 @@ the company profile and the sample workspace. Calls worth remembering:
   adding one.
 - Recruited gets a CI gate where Hired has none, because the roadmap invites
   design partners and other contributors; Railway still deploys main directly.
+
+## 2026-11-19 — Flood protection on the public pages
+
+- Limits are counted in Postgres (`RateHit`), not memory, so they hold across
+  restarts and replicas. The key is a SHA-256 of the address and the route, so
+  the table can't be turned back into a list of who applied.
+- 20 posts per address per form an hour, 60 across all forms. Loose on
+  purpose: applicants on Philippine mobile networks share public addresses
+  behind carrier NAT. The duplicate-email check does the fine work.
+- The address is X-Real-IP, else the LAST X-Forwarded-For entry. The first
+  entry is what the caller claims and a bot can rotate it.
+- A filled honeypot gets a 200 and saves nothing, rather than an error, so a
+  bot can't learn to skip it. No real person sees the field.
+- A failed count lets the post through: losing an application is worse than
+  letting a burst in.
+- instrumentation.ts must keep its dynamic import inside the
+  `NEXT_RUNTIME === "nodejs"` branch; after an early return Next still bundles
+  it for edge and `npm run dev` breaks on node:crypto.

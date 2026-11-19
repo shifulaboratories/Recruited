@@ -21,6 +21,8 @@
 
 - The probe (19 Nov): `tools/probe.mjs` runs every tool against a real database, checks that another workspace's ids are refused by every tool that takes one, that archived jobs and applications drop out of reads and close the apply page, and that the transport lists every tool and renders every prompt. `.github/workflows/gate.yml` runs typecheck, check, probe and build on every pull request.
 
+- Flood protection (19 Nov): the public POST routes (apply, screening, reference, booking) allow 20 posts per address per form an hour and 60 across all of them, counted in Postgres as a hash of the address, never the address. The apply and screening forms carry a hidden `trap` field; a post that fills it is answered as a success and saved nowhere. Cloudflare Turnstile, as an optional setting, is the next step. Also fixed `npm run dev`, which failed to compile any page because instrumentation pulled `node:crypto` into the edge bundle.
+
 ## Next
 
 Everything on the first plan is built. What's worth doing next should come from using it on a real hire.

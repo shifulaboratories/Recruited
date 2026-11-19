@@ -1,14 +1,22 @@
 import { FormErrors, type PublicPayload } from "@/lib/data/public";
 import { UserError } from "@/lib/data/errors";
 import { MAX_TOTAL_BYTES } from "@/lib/files";
+import { overLimit, TOO_MANY, type Route } from "@/lib/data/ratelimit";
 
 /**
  * Read a public form post defensively and turn errors into JSON the form can
  * show. A form with no file questions posts JSON; one with files posts
  * multipart, with the same JSON in a "payload" field and each file under its
  * question id.
+ *
+ * Two guards run before anything is saved. A post from an address that has
+ * sent too many in the last hour gets a 429 (see ratelimit.ts). A post that
+ * filled in `trap`, a field people never see, is answered as a success and
+ * saved nowhere: a bot learns nothing, and nobody real is ever turned away by
+ * it, because only software fills a field it can't see.
  */
-export async function handlePublicSubmit(request: Request, run: (p: PublicPayload) => Promise<unknown>) {
+export async function handlePublicSubmit(request: Request, route: Route, target: string, run: (p: PublicPayload) => Promise<unknown>) {
+  if (await overLimit(request, route, target)) return Response.json({ error: TOO_MANY }, { status: 429 });
   const length = Number(request.headers.get("content-length") ?? 0);
   if (length > MAX_TOTAL_BYTES + 1_000_000) return Response.json({ error: "Together the files are over 60 MB. Attach smaller ones." }, { status: 413 });
   let text: string;
@@ -35,6 +43,7 @@ export async function handlePublicSubmit(request: Request, run: (p: PublicPayloa
   } catch {
     return Response.json({ error: "The form didn't arrive in one piece. Try again." }, { status: 400 });
   }
+  if (typeof raw.trap === "string" && raw.trap.trim()) return Response.json({ ok: true });
   const answers: Record<string, string> = {};
   if (raw.answers && typeof raw.answers === "object")
     for (const [k, v] of Object.entries(raw.answers as Record<string, unknown>)) if (typeof v === "string") answers[k] = v;

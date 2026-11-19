@@ -1,11 +1,13 @@
 import { FormErrors, submitReference } from "@/lib/data/public";
 import { UserError } from "@/lib/data/errors";
+import { overLimit, TOO_MANY } from "@/lib/data/ratelimit";
 
 export const dynamic = "force-dynamic";
 
 /** A referee's answers. Public: the token in the path names the request. */
 export async function POST(request: Request, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
+  if (await overLimit(request, "ref", token)) return Response.json({ error: TOO_MANY }, { status: 429 });
   const text = await request.text();
   if (text.length > 20_000) return Response.json({ error: "That's more than this form accepts." }, { status: 413 });
   let raw: { answers?: Record<string, unknown> };
