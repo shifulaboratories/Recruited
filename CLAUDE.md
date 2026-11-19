@@ -69,7 +69,8 @@ docs/PLAN.md                What's built, what's next, open questions.
 
 ```bash
 npm run typecheck
-npm run check     # tools/rules.test.mjs: boards, forms, provenance (Node 22.18+)
+npm run check     # tools/rules.test.mjs: boards, forms, provenance (Node 22.18+), and that
+                  # every tool named in tools/eval-cases.mjs exists
 npm run probe     # tools/probe.mjs: every tool against a database named *probe*
 npm run build
 ```
@@ -79,6 +80,11 @@ The probe needs its own database (`createdb recruited_probe`, then
 because it creates and deletes accounts. It fails when a tool in `TOOLS` has no case,
 so a new tool gets one in the same commit, along with a cross-workspace line if it takes
 an id. `.github/workflows/gate.yml` runs all four on every pull request and on main.
+
+If you changed a tool's description, also run `ANTHROPIC_API_KEY=… npm run eval` (or
+`--only=<word>`) and compare with the last score in `.claude/DECISIONS.md`. It costs money
+and isn't in the gate. A case comes from a real misroute or a trap you can name, and is
+added before the fix, so you see it fail.
 
 Then exercise the change for real: the MCP endpoint with curl, and the public form in a
 browser (the provenance recorder only runs there). Voice: plain, direct, second person,

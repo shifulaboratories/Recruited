@@ -11,7 +11,8 @@
     "start": "prisma migrate deploy && next start",
     "postinstall": "prisma generate",
     "typecheck": "tsc --noEmit",
-    "check": "node --test tools/rules.test.mjs",
+    "check": "node --test tools/rules.test.mjs && node tools/eval-tool-choice.mjs --check",
+    "eval": "node tools/eval-tool-choice.mjs",
     "probe": "node tools/probe.mjs"
   },
   "//": "Everything lives in dependencies on purpose, as in Hired: a host that builds with NODE_ENV=production skips devDependencies, and the build must not fail on a missing compiler.",
