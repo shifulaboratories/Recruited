@@ -11,6 +11,7 @@ import {
   addInterviewAction,
   addNote,
   addScorecardAction,
+  scorecardLinkAction,
   deleteApplicantAction,
   deleteMessageDraft,
   deleteReferenceAction,
@@ -418,6 +419,18 @@ export default async function ApplicationPage({ params }: { params: Promise<{ id
                     ))}
                   </select>
                   <textarea className="field min-h-20" name="summary" placeholder="What you saw: evidence, not adjectives." />
+                </ActionForm>
+              </details>
+            )}
+            {iv.status !== "CANCELLED" && (
+              <details className="text-sm">
+                <summary className="btn btn-quiet text-xs cursor-pointer">Get a scorecard link for an interviewer</summary>
+                <ActionForm action={scorecardLinkAction} submit="Make link" className="pt-3">
+                  <input type="hidden" name="interviewId" value={iv.id} />
+                  <p className="text-[12.5px] text-rt-muted">
+                    They fill it in without an account, once, and don&apos;t see anyone else&apos;s verdict. Send it to them yourself.
+                  </p>
+                  <input className="field" name="interviewer" placeholder="Their name" />
                 </ActionForm>
               </details>
             )}

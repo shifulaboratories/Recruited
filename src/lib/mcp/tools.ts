@@ -653,6 +653,23 @@ export const TOOLS: McpTool[] = [
     },
   },
   {
+    name: "get_scorecard_link",
+    title: "Get a scorecard link for an interviewer",
+    description:
+      "A link one interviewer uses to fill in their own scorecard without a Recruited account: their overall call, what they saw, and optional ratings. Reach for it when someone other than the person interviewed the applicant, or the person would rather the interviewer write it themselves. " +
+      "The page shows the applicant's name, the interview and the job's rubric, and nothing else: no answers, no tier, and no other interviewer's verdict, so each card is independent. It works once; asking again for the same interviewer returns the same unused link. " +
+      "Sends nothing: give the link to the person to pass on, or put it in a message they approve. What comes back lands as a scorecard on the interview, attributed to that interviewer.",
+    inputSchema: object(
+      { interview_id: str("The interview's id, from get_application or list_interviews."), interviewer: str("The interviewer's name, as it should appear on their scorecard.") },
+      ["interview_id", "interviewer"],
+    ),
+    annotations: ADD,
+    handler: async (args, ctx) => {
+      const l = await interviews.scorecardLink(ctx.userId, need(args, "interview_id"), need(args, "interviewer"));
+      return { interviewer: l.interviewer, link: `${ctx.baseUrl}${l.path}` };
+    },
+  },
+  {
     name: "list_interviews",
     title: "List interviews",
     description:

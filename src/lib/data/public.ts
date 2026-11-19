@@ -6,6 +6,7 @@ import { classifyOrigin, readTelemetry, styleSignals } from "@/lib/provenance";
 import { secret } from "@/lib/ids";
 import { publicStatusOf } from "@/lib/applicant-status";
 import { privacyNotice } from "@/lib/privacy";
+import { addScorecard } from "@/lib/data/interviews";
 import { checkReferenceAnswers, REFERENCE_QUESTIONS } from "@/lib/references";
 import { accepts, acceptLabel, cleanFilename, isVideo, MAX_FILE_BYTES, MAX_TOTAL_BYTES, MAX_VIDEO_BYTES, sniffMime } from "@/lib/files";
 
@@ -13,7 +14,8 @@ import { accepts, acceptLabel, cleanFilename, isVideo, MAX_FILE_BYTES, MAX_TOTAL
  * The unauthenticated paths into a workspace: the apply page
  * (/apply/<listing slug>), a screening form (/f/<form slug>?t=<token>), a
  * reference check (/ref/<token>), a booking page (/book/<token>), a shared
- * applicant (/s/<slug>) and an applicant's own status page (/status/<token>).
+ * applicant (/s/<slug>), an applicant's own status page (/status/<token>) and
+ * an interviewer's scorecard link (/score/<token>).
  *
  * Neither takes a userId, because the person on the other end has no account.
  * The owner is resolved from the row the unguessable slug names, never from
@@ -399,6 +401,65 @@ export async function bookSlot(token: string, slot: string) {
   const r = await db.interview.updateMany({ where: { id: i.id, scheduledAt: null }, data: { scheduledAt: pick, slots: [] } });
   if (!r.count) throw new UserError("You've already picked a time.");
   return { scheduledAt: pick.toISOString() };
+}
+
+// ---------------------------------------------------------------------------
+// An interviewer's scorecard link: /score/<token>. Shows who and what they
+// interviewed and the job's rubric, and nothing else: no answers, no tier,
+// and no other interviewer's verdict, so each card is their own.
+// ---------------------------------------------------------------------------
+
+async function liveScorecardLink(token: string) {
+  if (!token || token.length > 200) return null;
+  return db.scorecardLink.findFirst({
+    where: { token, interview: { status: { not: "CANCELLED" }, application: { archivedAt: null, job: { archivedAt: null } } } },
+    include: {
+      interview: {
+        select: {
+          title: true,
+          round: true,
+          scheduledAt: true,
+          application: { select: { candidate: { select: { name: true } }, job: { select: { title: true, rubric: true } }, user: { select: { companyName: true } } } },
+        },
+      },
+    },
+  });
+}
+
+export async function publicScorecard(token: string) {
+  const l = await liveScorecardLink(token);
+  if (!l) return null;
+  const a = l.interview.application;
+  return {
+    interviewer: l.interviewer,
+    applicant: a.candidate.name,
+    job: a.job.title,
+    company: a.user.companyName,
+    interview: { title: l.interview.title, round: l.interview.round, scheduledAt: l.interview.scheduledAt },
+    rubric: a.job.rubric,
+    done: !!l.scorecardId,
+  };
+}
+
+export async function submitScorecard(token: string, input: { recommendation?: string; summary?: string; ratings?: unknown }) {
+  const l = await liveScorecardLink(token);
+  if (!l) throw new UserError("This link doesn't work any more.");
+  if (l.scorecardId) throw new UserError("Your scorecard is already in. Thank you.");
+  if (!input.summary?.trim()) throw new FormErrors({ summary: "Say what you saw: what they did well and where they fell short." });
+  const card = await addScorecard(l.userId, l.interviewId, {
+    interviewer: l.interviewer,
+    recommendation: input.recommendation ?? "",
+    ratings: input.ratings,
+    summary: input.summary.slice(0, 5000),
+    writtenBy: "link",
+  });
+  // Spending the link in the same write means a second post, even a racing one, finds it spent.
+  const spent = await db.scorecardLink.updateMany({ where: { id: l.id, scorecardId: null }, data: { scorecardId: card.id } });
+  if (!spent.count) {
+    await db.scorecard.delete({ where: { id: card.id } });
+    throw new UserError("Your scorecard is already in. Thank you.");
+  }
+  return { ok: true };
 }
 
 // ---------------------------------------------------------------------------

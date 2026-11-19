@@ -39,6 +39,8 @@
 
 - Tool-choice eval (19 Nov): `npm run eval` sends the real tool array and server instructions with each prompt in `tools/eval-cases.mjs` (26 cases, most of them traps: sending instead of drafting, replacing a form without reading it, deleting instead of exporting) and scores the first tool picked. It needs `ANTHROPIC_API_KEY` and isn't in the gate; `npm run check` validates that every case names a real tool. No score recorded yet.
 
+- Scorecard links (19 Nov): `get_scorecard_link` gives one interviewer a link to fill in their own scorecard without an account (`/score/<token>`, `ScorecardLink`), and the applicant screen makes one too. It shows the applicant, the interview and the rubric, never another interviewer's verdict, and works once. 45 tools, 5 prompts.
+
 ## Next
 
 Everything on the first plan is built. What's worth doing next should come from using it on a real hire.

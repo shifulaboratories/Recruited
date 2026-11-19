@@ -349,3 +349,15 @@ The 26 cases target the traps that cost the most in an ATS: anything that sends,
 replaces. `npm run check` runs it with `--check`, which validates the cases for free and
 fails if one names a tool that no longer exists. No scored run yet: this session had no
 API key. Record the first score here when there is one.
+
+## 2026-11-19 — Interviewers score by link, blind to each other
+
+Roadmap item 21 is useful under every answer to the workspaces question, so it went first.
+A `ScorecardLink` is per interviewer, per interview, and works once. It is spent with a
+conditional update, so two racing posts can't write two cards. The page shows the
+applicant's name, the interview and the job's rubric. It never shows the answers, the tier
+or other interviewers' verdicts, because a scorecard written after reading someone else's
+anchors on it. If an interviewer needs the answers, the person can give them the
+`/s/` share link, which was built for that. The scorecard is written through
+`addScorecard` like any other, with `writtenBy: "link"`, so it marks the interview DONE
+and feeds the panel view.
