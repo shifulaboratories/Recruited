@@ -1,6 +1,7 @@
 import { FormErrors, submitReference } from "@/lib/data/public";
 import { UserError } from "@/lib/data/errors";
 import { overLimit, TOO_MANY } from "@/lib/data/ratelimit";
+import { recordError } from "@/lib/data/system";
 
 export const dynamic = "force-dynamic";
 
@@ -23,7 +24,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
   } catch (e) {
     if (e instanceof FormErrors) return Response.json({ error: e.message, fields: e.fields }, { status: 422 });
     if (e instanceof UserError) return Response.json({ error: e.message }, { status: 400 });
-    console.error("[ref] submit failed", e);
+    await recordError("ref", e);
     return Response.json({ error: "Something went wrong on our side. Try again in a moment." }, { status: 500 });
   }
 }

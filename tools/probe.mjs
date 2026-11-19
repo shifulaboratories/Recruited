@@ -46,6 +46,7 @@ const { handleMcpPost } = await load("mcp/handler.ts");
 const { handlePublicSubmit } = await load("public-submit.ts");
 const ratelimit = await load("data/ratelimit.ts");
 const usersData = await load("data/users.ts");
+const systemData = await load("data/system.ts");
 
 const BASE = "http://probe.invalid";
 const called = new Set();
@@ -322,6 +323,16 @@ try {
     await db.user.update({ where: { id: a.id }, data: { role: "MEMBER" } });
   });
 
+  await check("only the owner reads the instance's health, and caught errors show in it", async () => {
+    await refuses(call("instance_health", b, {}), /owner/);
+    await db.user.update({ where: { id: a.id }, data: { role: "OWNER" } });
+    await systemData.recordError(`probe-${stamp}`, new Error("a probe error"));
+    const h = await call("instance_health", a, {});
+    ok(h.database.ok && h.database.latestMigration, "no database status");
+    ok(h.errors.recent.some((e) => e.where === `probe-${stamp}` && /a probe error/.test(e.message)), "the recorded error isn't listed");
+    await db.user.update({ where: { id: a.id }, data: { role: "MEMBER" } });
+  });
+
   await check("a reset link works once, for its own account, and signs every browser out", async () => {
     const got = await call("get_password_reset_link", b, {});
     ok(got.account === b.email, "the link is for another account");
@@ -451,6 +462,7 @@ try {
   failures.push(`setup: ${error instanceof Error ? error.stack : String(error)}`);
 } finally {
   await db.rateHit.deleteMany({});
+  await db.errorEvent.deleteMany({ where: { where: { startsWith: "probe-" } } });
   await db.setting.deleteMany({ where: { key: { startsWith: "turnstile." } } });
   await db.user.deleteMany({ where: { id: { in: made } } });
   await db.$disconnect();

@@ -1,4 +1,5 @@
 import { turnstileKeys } from "@/lib/data/settings";
+import { recordError } from "@/lib/data/system";
 
 /**
  * Checks a Cloudflare Turnstile token when the owner has turned the spam
@@ -18,7 +19,7 @@ export async function passesTurnstile(token: string | undefined, address: string
     const data = (await res.json()) as { success?: boolean };
     return data.success === true;
   } catch (e) {
-    console.error("[turnstile] couldn't reach Cloudflare; letting the post through", e);
+    await recordError("turnstile: couldn't reach Cloudflare, let the post through", e);
     return true;
   }
 }

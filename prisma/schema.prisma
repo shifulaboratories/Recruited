@@ -562,3 +562,15 @@ model Setting {
   value     String
   updatedAt DateTime @updatedAt
 }
+
+/// Server errors the app caught: where, what, when. Instance-level, read by
+/// the owner through instance_health. Messages are cut to 500 characters and
+/// the newest 1000 are kept.
+model ErrorEvent {
+  id        String   @id @default(cuid())
+  where     String
+  message   String
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}

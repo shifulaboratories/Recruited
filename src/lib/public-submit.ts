@@ -3,6 +3,7 @@ import { UserError } from "@/lib/data/errors";
 import { MAX_TOTAL_BYTES } from "@/lib/files";
 import { clientAddress, overLimit, TOO_MANY, type Route } from "@/lib/data/ratelimit";
 import { NOT_CONFIRMED, passesTurnstile } from "@/lib/turnstile";
+import { recordError } from "@/lib/data/system";
 
 /**
  * Read a public form post defensively and turn errors into JSON the form can
@@ -65,7 +66,7 @@ export async function handlePublicSubmit(request: Request, route: Route, target:
   } catch (e) {
     if (e instanceof FormErrors) return Response.json({ error: e.message, fields: e.fields }, { status: 422 });
     if (e instanceof UserError) return Response.json({ error: e.message }, { status: 400 });
-    console.error("[apply] submit failed", e);
+    await recordError(route, e);
     return Response.json({ error: "Something went wrong on our side. Try again in a moment." }, { status: 500 });
   }
 }

@@ -23,7 +23,7 @@ You tell Claude what you're hiring for. It writes the job, an application form, 
 - **Around the call.** `save_probes` keeps the follow-up questions to ask, aimed at the answers worth a second look; `request_reference` sends a referee four fixed questions on a link; `schedule_interview` can offer times that the applicant picks on a booking page in their own time zone, with no calendar connected.
 - **Every day and at the end.** `daily_brief` says what needs you today, and the jobs screen shows the same list. `close_out_job` drafts a kind note to everyone still waiting when a role is filled. `share_applicant` makes a read-only link for someone without an account.
 - **A sample workspace** to look around before posting a real role, removed in one step without touching real data.
-- **39 MCP tools and 5 prompts** (`morning_brief`, `prepare_for_call`, `post_a_role`, `review_applicants`, `message_applicants`). The app has the screens a person needs to look and adjust: jobs, applicants, one applicant's answers, and Connect Claude.
+- **40 MCP tools and 5 prompts** (`morning_brief`, `prepare_for_call`, `post_a_role`, `review_applicants`, `message_applicants`). The app has the screens a person needs to look and adjust: jobs, applicants, one applicant's answers, and Connect Claude.
 
 ## Connect your AI
 

@@ -27,6 +27,8 @@
 
 - Spam check (19 Nov): optional Cloudflare Turnstile on the open apply page, turned on by the owner with `set_spam_check` or under Settings. Keys live in a new `Setting` table, so `DATABASE_URL` stays the only variable; the secret is never shown again. Screening links are personal and skip it. If Cloudflare can't be reached the post goes through. 39 tools, 5 prompts.
 
+- Backups and health (19 Nov): docs/DEPLOY.md says how to back up on Railway (the Postgres service's Backups tab) and with Compose, whose new `backup` service writes a dump a day to `./backups` and keeps 14. Server errors the app catches (a tool failing, a public form failing) are kept in `ErrorEvent`, newest 1000, and the owner reads them with `instance_health`, beside database status, the latest migration and totals. 40 tools, 5 prompts.
+
 ## Next
 
 Everything on the first plan is built. What's worth doing next should come from using it on a real hire.

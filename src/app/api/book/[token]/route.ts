@@ -1,6 +1,7 @@
 import { bookSlot } from "@/lib/data/public";
 import { UserError } from "@/lib/data/errors";
 import { overLimit, TOO_MANY } from "@/lib/data/ratelimit";
+import { recordError } from "@/lib/data/system";
 
 export const dynamic = "force-dynamic";
 
@@ -19,7 +20,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
     return Response.json(await bookSlot(token, slot));
   } catch (e) {
     if (e instanceof UserError) return Response.json({ error: e.message }, { status: 400 });
-    console.error("[book] failed", e);
+    await recordError("book", e);
     return Response.json({ error: "Something went wrong on our side. Try again in a moment." }, { status: 500 });
   }
 }
