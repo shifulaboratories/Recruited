@@ -237,3 +237,18 @@ the company profile and the sample workspace. Calls worth remembering:
   someone else's outage shouldn't cost a real application.
 - The probe uses Cloudflare's published test keys (1x… always passes, 2x…
   always fails), so CI checks the real siteverify call.
+
+## 2026-11-19 — Backups and the error log
+
+- Compose gets a `backup` service (the postgres image running pg_dump once a
+  day into ./backups, keeping 14), not a cron on the host, so it works with
+  the one command self-hosters already run. A dump and restore round trip
+  was checked with pg_dump and pg_restore 16.
+- Railway backups are a setting on the Postgres service, not something the
+  app can turn on; DEPLOY.md points at the Backups tab.
+- Caught errors go to `ErrorEvent` through `recordError`, which still writes
+  the console line and never throws. Messages are cut to 500 characters.
+  They can carry fragments of whatever failed, which is why only the owner
+  reads them and only through `instance_health`.
+- No screen for health yet: it's a question you ask Claude when something
+  breaks. Add one if real use asks for it.

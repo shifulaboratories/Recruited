@@ -19,6 +19,11 @@
 #                      outside this compose network; set one anyway on a shared host.
 #   PORT               The host port to listen on (the container stays on 3000).
 #
+# Backups: the backup service writes a compressed dump of the database to
+# ./backups once a day and keeps the last 14. Copy that folder off the machine
+# (a synced folder, rsync, anything); a backup on the same disk doesn't survive
+# the disk. To restore one, see docs/DEPLOY.md.
+#
 # Applicants reach the apply and screening pages at whatever address you serve
 # this from, so put it behind HTTPS with a real domain before posting a listing.
 
@@ -56,6 +61,36 @@ services:
       interval: 5s
       timeout: 5s
       retries: 12
+    restart: unless-stopped
+
+  backup:
+    image: postgres:16
+    environment:
+      PGHOST: db
+      PGUSER: recruited
+      PGPASSWORD: ${POSTGRES_PASSWORD:-recruited}
+      PGDATABASE: recruited
+    volumes:
+      - ./backups:/backups
+    depends_on:
+      db:
+        condition: service_healthy
+    # One dump a day, named by date; dumps older than 14 days are removed.
+    # $$ is a literal $ inside compose.
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        while true; do
+          f=/backups/recruited-$$(date +%F).dump
+          if pg_dump --format=custom --file="$$f.partial" && mv "$$f.partial" "$$f"; then
+            echo "backup: wrote $$f"
+          else
+            echo "backup: pg_dump failed" >&2
+          fi
+          find /backups -name 'recruited-*.dump' -mtime +14 -delete
+          sleep 86400
+        done
     restart: unless-stopped
 
 volumes:

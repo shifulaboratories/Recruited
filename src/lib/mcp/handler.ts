@@ -2,6 +2,7 @@ import type { User } from "@prisma/client";
 import { UserError } from "@/lib/data/errors";
 import { FormErrors } from "@/lib/data/public";
 import { TOOLS, toolsByName, PROMPTS, promptsByName, MCP_CONTENT, type McpContext } from "@/lib/mcp/tools";
+import { recordError } from "@/lib/data/system";
 
 /**
  * A small, stateless implementation of the MCP Streamable HTTP transport,
@@ -65,7 +66,7 @@ async function callTool(name: string, args: Record<string, unknown>, ctx: McpCon
   } catch (e) {
     if (e instanceof FormErrors) return { content: [{ type: "text", text: `${e.message} ${JSON.stringify(e.fields)}` }], isError: true };
     if (e instanceof UserError) return { content: [{ type: "text", text: e.message }], isError: true };
-    console.error(`[mcp] ${name} failed`, e);
+    await recordError(`mcp ${name}`, e);
     return { content: [{ type: "text", text: `${name} failed on the server. Nothing was changed by the failed step; try again or tell the person.` }], isError: true };
   }
 }

@@ -58,3 +58,30 @@ npm start          # prisma migrate deploy && next start
 ```
 
 Set `PORT` if the host expects a port other than 3000.
+
+## Backups
+
+Everything Recruited keeps, uploaded files and video answers included, is in the one
+Postgres database, so backing up the database backs up everything.
+
+**On Railway**, open the Postgres service, then its Backups tab, and add a daily
+schedule. Railway keeps volume backups on the schedule you pick and restores one from
+the same tab. The tab also offers point-in-time recovery, which restores the database to
+any moment in roughly the last four weeks. See Railway's
+[backups](https://docs.railway.com/volumes/backups) and
+[point-in-time recovery](https://docs.railway.com/volumes/point-in-time-recovery) pages.
+
+**With Docker Compose**, the `backup` service in `docker-compose.yml` writes a dump to
+`./backups` once a day, named by date, and keeps the last 14. Copy that folder somewhere
+off the machine, because a backup on the same disk goes with the disk. To restore a dump
+into a fresh install:
+
+```bash
+docker compose up -d db
+docker compose exec -T db pg_restore --clean --if-exists --no-owner \
+  -U recruited -d recruited < backups/recruited-2026-11-19.dump
+docker compose up -d
+```
+
+**Anywhere else**, run `pg_dump --format=custom` against `DATABASE_URL` on a schedule
+and restore with `pg_restore`, as above.

@@ -15,6 +15,7 @@ import * as closeout from "@/lib/data/closeout";
 import * as sample from "@/lib/data/sample";
 import * as users from "@/lib/data/users";
 import * as settings from "@/lib/data/settings";
+import * as system from "@/lib/data/system";
 import { UserError } from "@/lib/data/errors";
 import { BOARDS, BOARD_KEYS, boardByKey } from "@/lib/boards";
 import { QUESTION_TYPES } from "@/lib/forms";
@@ -964,6 +965,18 @@ export const TOOLS: McpTool[] = [
       if (siteKey === undefined && secretKey === undefined) return settings.spamCheckStatus();
       return settings.setTurnstile(ctx.userId, { siteKey: siteKey ?? "", secretKey: secretKey ?? "" });
     },
+  },
+  {
+    name: "instance_health",
+    title: "Check this Recruited instance's health",
+    description:
+      "Reach for this when something in Recruited failed, looks slow or looks wrong, or the person asks whether their instance is healthy. Owner only. " +
+      "Returns whether the database answers and how fast, the latest migration applied, account, job and application totals, whether the spam check is on, " +
+      "and the errors the server caught: how many in the last seven days and the newest twenty, each with where it happened, the message and when. " +
+      "Read-only. Explain an error in plain words and say what the person can do; don't guess at causes the message doesn't support.",
+    inputSchema: object({}),
+    annotations: READ,
+    handler: (_args, ctx) => system.instanceHealth(ctx.userId),
   },
   {
     name: "get_password_reset_link",
