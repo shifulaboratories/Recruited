@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { classifyOrigin, readTelemetry, styleSignals, styleLabel, EMPTY_TELEMETRY } from "../src/lib/provenance.ts";
 import { renderListing, toPlain, toHtml, lintListing, boardByKey, BOARDS } from "../src/lib/boards.ts";
 import { QuestionsSchema, failedKnockouts, validateAnswer, readQuestions } from "../src/lib/forms.ts";
-import { mailtoLink, KIND_GUIDANCE, MESSAGE_KINDS } from "../src/lib/messages.ts";
+import { mailtoLink, KIND_GUIDANCE, MESSAGE_KINDS, renderReceipt, DEFAULT_RECEIPT_BODY, DEFAULT_RECEIPT_SUBJECT } from "../src/lib/messages.ts";
 import { parseCsv, mapColumns, guessBoard, rowsToApplicants } from "../src/lib/csv.ts";
 import { panelView, offerChanges, readRatings, formatOfferPay } from "../src/lib/scorecards.ts";
 import { readProbes, ProbesSchema } from "../src/lib/probes.ts";
@@ -260,4 +260,18 @@ test("an onsite job has a place, and missing pay is left out rather than guessed
 test("the JSON can't close its script tag", () => {
   const out = ldJson(jobPostingLd({ ...posting, descriptionHtml: "</script><script>alert(1)</script>" }));
   assert.ok(!out.includes("</script>"));
+});
+
+test("the receipt fills its four placeholders and leaves anything else alone", () => {
+  const vars = { first_name: "Ana", job: "Bookkeeper", company: "Acme", sender: "Dana" };
+  assert.equal(renderReceipt(DEFAULT_RECEIPT_SUBJECT, vars), "We have your application for Bookkeeper");
+  const body = renderReceipt(DEFAULT_RECEIPT_BODY, vars);
+  assert.match(body, /^Hi Ana,/);
+  assert.match(body, /Bookkeeper at Acme/);
+  assert.ok(body.endsWith("Dana"));
+  assert.equal(renderReceipt("Hi {first_name}, {salary} {constructor}", vars), "Hi Ana, {salary} {constructor}");
+});
+
+test("the built-in receipt promises nothing", () => {
+  assert.doesNotMatch(DEFAULT_RECEIPT_BODY + DEFAULT_RECEIPT_SUBJECT, /will (reply|respond|get back|be in touch)|within \d|days?\b/i);
 });

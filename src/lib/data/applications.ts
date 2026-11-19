@@ -241,6 +241,8 @@ export async function getApplication(userId: string, applicationId: string) {
       subject: m.subject,
       body: m.body,
       writtenBy: m.writtenBy,
+      sentVia: m.sentVia,
+      sendError: m.sendError,
       createdAt: m.createdAt,
       sentAt: m.sentAt,
     })),

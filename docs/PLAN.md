@@ -31,6 +31,8 @@
 
 - Careers page and Google for Jobs (19 Nov): a new `careers` board. `update_company` takes `careers_slug`, and `/careers/<slug>` lists every open job with a LIVE careers listing. That listing's apply page is the only one search engines may index, and it carries schema.org JobPosting data (`src/lib/job-posting.ts`, pure, tested in rules.test.mjs). Every other apply link stays unlisted.
 
+- Your mailbox (19 Nov): Recruited sends from the person's own account over SMTP (`Mailbox`, one per workspace; the password is stored and never read back). `set_mailbox` connects it, signing in before saving, and words the receipt; `send_message` sends a saved draft only after the person said send, to the address on file. Each person who applies through an apply link gets a receipt that says only that it arrived, sent after the response so the applicant never waits on a mail server. A failed send leaves the draft a draft with the reason; 150 sends a day at most. 42 tools, 5 prompts.
+
 ## Next
 
 Everything on the first plan is built. What's worth doing next should come from using it on a real hire.

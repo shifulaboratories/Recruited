@@ -5,6 +5,7 @@ import * as forms from "@/lib/data/forms";
 import * as applications from "@/lib/data/applications";
 import * as uploads from "@/lib/data/uploads";
 import * as messages from "@/lib/data/messages";
+import * as mailbox from "@/lib/data/mailbox";
 import * as imports from "@/lib/data/imports";
 import * as interviews from "@/lib/data/interviews";
 import * as probes from "@/lib/data/probes";
@@ -21,6 +22,7 @@ import { careersPath } from "@/lib/data/public";
 import { BOARDS, BOARD_KEYS, boardByKey } from "@/lib/boards";
 import { QUESTION_TYPES } from "@/lib/forms";
 import { MESSAGE_KINDS } from "@/lib/messages";
+import { SECURITY } from "@/lib/smtp";
 import { IMPORT_FIELDS, type ImportField } from "@/lib/csv";
 import { INTERVIEW_FORMATS, OFFER_STATUSES, PAY_PERIODS, RECOMMENDATIONS } from "@/lib/scorecards";
 
@@ -60,6 +62,8 @@ const READ = { readOnlyHint: true, destructiveHint: false, idempotentHint: true,
 const ADD = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false };
 const SET = { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false };
 const REPLACE = { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false };
+/** Leaves the building: an email that can't be recalled. */
+const SEND = { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true };
 
 function s(args: Json, key: string): string | undefined {
   const v = args[key];
@@ -777,9 +781,10 @@ export const TOOLS: McpTool[] = [
     name: "save_message",
     title: "Save or mark a message",
     description:
-      "Save a message to an applicant as a draft, or record that it was sent. This server never sends email. " +
-      "To send, use the person's own mail connector if you have one (Gmail, Outlook) and only after they say send, then call this again with message_id and status SENT; " +
-      "otherwise tell them the draft is on the applicant's page in Recruited, where Open in email puts it in their mail app. " +
+      "Save a message to an applicant as a draft, or record that it was sent by hand. Saving never sends anything. " +
+      "To send a draft: if the person connected a mailbox (set_mailbox shows it), show them the draft and call send_message once they say send. " +
+      "Otherwise use their own mail connector if you have one, only after they say send, then call this again with message_id and status SENT; " +
+      "or tell them the draft is on the applicant's page in Recruited, where Open in email puts it in their mail app. " +
       "Without message_id it adds a new message. With message_id it changes that draft: subject and body replace what was there. A SENT message can't be edited, because it is the record of what the applicant was told. " +
       "Returns the message with a mailto link.",
     inputSchema: object({
@@ -815,6 +820,66 @@ export const TOOLS: McpTool[] = [
         mailto: saved.mailto,
         page: `${ctx.baseUrl}/applications/${m.applicationId}`,
       };
+    },
+  },
+  {
+    name: "send_message",
+    title: "Send a draft from the person's mailbox",
+    description:
+      "SENDS A REAL EMAIL to an applicant from the person's own connected mailbox, and it can't be recalled. " +
+      "Call it ONLY after the person has seen this exact draft, subject and body, in this conversation and said send. Approval of a plan, a template or a different draft is not approval of this one; when sending to several applicants, show each draft (or one in full and the rest as a list) and get a yes for the batch first. " +
+      "It sends a draft saved with save_message, to the address on the applicant's record (there is no way to give another address), and marks it SENT. " +
+      "It refuses when no mailbox is connected (then send through the person's mail connector or their app, and mark it with save_message status SENT), when the draft was already sent, and past 150 sends in 24 hours. " +
+      "If their mail server refuses, nothing is marked sent and the server's reason comes back: tell the person in plain words.",
+    inputSchema: object({ message_id: str("The draft's id, from save_message.") }, ["message_id"]),
+    annotations: SEND,
+    handler: async (args, ctx) => {
+      const m = await mailbox.sendMessage(ctx.userId, need(args, "message_id"));
+      return { id: m.id, status: m.status, sentAt: m.sentAt, sentVia: m.sentVia, page: `${ctx.baseUrl}/applications/${m.applicationId}` };
+    },
+  },
+  {
+    name: "set_mailbox",
+    title: "Connect the mailbox Recruited sends from",
+    description:
+      "The person's own email account, over SMTP, which is how Recruited sends: send_message for drafts they approve, and an automatic receipt to each person who applies through an apply link. Mail always goes from their address; the server never sends as itself. " +
+      "With no arguments it shows what's connected (never the password), today's sends against the daily limit of 150, and the receipt's wording. " +
+      "To connect: host, port, security, username, password and from_email. For Gmail that's smtp.gmail.com, 587, starttls, their address, and an app password from their Google account (Security, App passwords; it needs 2-step verification on); for Microsoft 365, smtp.office365.com, 587, starttls. Ask for every value; never guess a server or a password. " +
+      "A password typed into a conversation stays in its history, so offer Settings in the Recruited app as the place to type it; send it here only if they prefer. " +
+      "It signs in to the server before saving and saves nothing if that fails. disconnect: true removes the mailbox. " +
+      "receipt_on turns the automatic receipt on or off (it's on once a mailbox is connected). receipt_subject and receipt_body replace its wording and may use {first_name}, {job}, {company} and {sender}; an empty string goes back to the built-in wording. A receipt says the application arrived. Don't let it promise a reply, a timeline or a decision unless the person wrote that promise themselves.",
+    inputSchema: object({
+      host: str("The SMTP server, e.g. smtp.gmail.com."),
+      port: num("Usually 587 (starttls) or 465 (tls)."),
+      security: oneOf(SECURITY, "starttls (port 587, the usual), tls (port 465), or none, only for a relay on the same private network."),
+      username: str("The sign-in name, usually the email address."),
+      password: str("The password or app password. Leave out to keep the saved one when changing other settings."),
+      from_email: str("The address applicants see and reply to."),
+      from_name: str("The name applicants see, e.g. 'Dana at Acme'."),
+      disconnect: bool("true removes the mailbox. Nothing is sent from Recruited after that."),
+      receipt_on: bool("Send the automatic receipt to each person who applies."),
+      receipt_subject: str("The receipt's subject. Empty string for the built-in one."),
+      receipt_body: str("The receipt's text. Empty string for the built-in one."),
+    }),
+    annotations: SET,
+    handler: async (args, ctx) => {
+      if (args.disconnect === true) return mailbox.disconnectMailbox(ctx.userId);
+      let out = undefined as Awaited<ReturnType<typeof mailbox.getMailbox>> | undefined;
+      if (s(args, "host") !== undefined) {
+        out = await mailbox.connectMailbox(ctx.userId, {
+          host: need(args, "host"),
+          port: n(args, "port"),
+          security: s(args, "security"),
+          username: need(args, "username"),
+          password: s(args, "password"),
+          fromEmail: need(args, "from_email"),
+          fromName: s(args, "from_name"),
+        });
+      }
+      const on = typeof args.receipt_on === "boolean" ? args.receipt_on : undefined;
+      if (on !== undefined || s(args, "receipt_subject") !== undefined || s(args, "receipt_body") !== undefined)
+        out = await mailbox.setReceipt(ctx.userId, { on, subject: s(args, "receipt_subject"), body: s(args, "receipt_body") });
+      return out ?? mailbox.getMailbox(ctx.userId);
     },
   },
   {
@@ -895,7 +960,7 @@ export const TOOLS: McpTool[] = [
       "When a role is filled or closed, make sure everyone still waiting hears back. Saves one REJECTION draft for every applicant in NEW, SCREEN, INTERVIEW or REJECTED who hasn't already been sent or drafted one; OFFER and HIRED are never touched. " +
       "ALWAYS call with dry_run true first and show the person who it covers and the preview; run it for real only after they say yes. " +
       "subject and body are templates: {first_name}, {name}, {job}, {company}, {at_company} (' at Acme' or nothing) and {from} are filled per applicant. Leave them out for a short, kind default. Don't give a reason, and never mention how answers were typed or pasted. " +
-      "move_to_rejected also moves them to REJECTED; close_job also closes the job and every listing. It sends nothing: the drafts wait on each applicant's page, or go out through the person's mail tool (then save_message with status SENT).",
+      "move_to_rejected also moves them to REJECTED; close_job also closes the job and every listing. It sends nothing: the drafts wait on each applicant's page until the person says send (then send_message, or their own mail tool and save_message with status SENT).",
     inputSchema: object(
       {
         job_id: str("The job's id."),

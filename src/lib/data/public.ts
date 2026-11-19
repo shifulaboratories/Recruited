@@ -221,7 +221,7 @@ export async function submitApplication(listingSlug: string, p: PublicPayload) {
         },
       });
     }
-    return { applicationId: app.id };
+    return { applicationId: app.id, userId };
   });
 }
 

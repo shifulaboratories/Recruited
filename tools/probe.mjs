@@ -13,6 +13,9 @@
  *   - archived jobs and applications drop out of every read;
  *   - the public apply page records provenance, marks knockouts without
  *     declining anyone, and refuses a second application;
+ *   - mail goes only from a connected mailbox, to the applicant on file: the
+ *     receipt once per application, a draft only through send_message, and
+ *     never past the daily limit (against a fake SMTP server in this file);
  *   - the MCP transport lists every tool and renders every prompt.
  *
  * It REFUSES any database whose name does not contain "probe", because it
@@ -26,6 +29,7 @@
 import { createJiti } from "jiti";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
+import net from "node:net";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const dbName = new URL(process.env.DATABASE_URL ?? "postgresql://x/none").pathname.slice(1);
@@ -47,6 +51,7 @@ const { handlePublicSubmit } = await load("public-submit.ts");
 const ratelimit = await load("data/ratelimit.ts");
 const usersData = await load("data/users.ts");
 const systemData = await load("data/system.ts");
+const mailboxData = await load("data/mailbox.ts");
 
 const BASE = "http://probe.invalid";
 const called = new Set();
@@ -82,6 +87,61 @@ async function refuses(promise, pattern) {
   }
   throw new Error("did not refuse");
 }
+
+/**
+ * Just enough of an SMTP server for nodemailer to sign in and hand over a
+ * message, on a random local port. It takes the password "right-password"
+ * and refuses any other, and keeps what it receives.
+ */
+function fakeSmtp() {
+  const received = [];
+  const server = net.createServer((sock) => {
+    let buf = "";
+    let inData = false;
+    let msg = { rcpt: [], data: "" };
+    const say = (line) => sock.write(`${line}\r\n`);
+    say("220 probe ESMTP");
+    sock.on("error", () => {});
+    sock.on("data", (chunk) => {
+      buf += chunk.toString("utf8");
+      let i;
+      while ((i = buf.indexOf("\r\n")) >= 0) {
+        const line = buf.slice(0, i);
+        buf = buf.slice(i + 2);
+        if (inData) {
+          if (line === ".") {
+            inData = false;
+            received.push(msg);
+            msg = { rcpt: [], data: "" };
+            say("250 2.0.0 queued");
+          } else msg.data += `${line.startsWith("..") ? line.slice(1) : line}\n`;
+          continue;
+        }
+        const cmd = line.slice(0, 4).toUpperCase();
+        if (cmd === "EHLO") sock.write("250-probe\r\n250-AUTH PLAIN LOGIN\r\n250 8BITMIME\r\n");
+        else if (cmd === "HELO") say("250 probe");
+        else if (cmd === "AUTH") {
+          const creds = Buffer.from(line.split(" ")[2] ?? "", "base64").toString();
+          say(creds.endsWith("\0right-password") ? "235 2.7.0 Accepted" : "535 5.7.8 Username and Password not accepted");
+        } else if (cmd === "MAIL") say("250 ok");
+        else if (cmd === "RCPT") {
+          msg.rcpt.push(line);
+          say("250 ok");
+        } else if (cmd === "DATA") {
+          inData = true;
+          say("354 go ahead");
+        } else if (cmd === "QUIT") {
+          say("221 bye");
+          sock.end();
+        } else if (cmd === "RSET" || cmd === "NOOP") say("250 ok");
+        else say("502 not here");
+      }
+    });
+  });
+  return new Promise((resolve) => server.listen(0, "127.0.0.1", () => resolve({ server, port: server.address().port, received })));
+}
+const smtp = await fakeSmtp();
+let sendable = null;
 
 const stamp = Date.now().toString(36);
 const made = [];
@@ -333,6 +393,77 @@ try {
     await db.user.update({ where: { id: a.id }, data: { role: "MEMBER" } });
   });
 
+  await check("a mailbox is saved only after it signs in, and its password never comes back", async () => {
+    const box = { host: "127.0.0.1", port: smtp.port, security: "none", username: "a@probe.invalid", from_email: `hiring-${stamp}@probe.invalid`, from_name: "Probe Hiring" };
+    ok((await call("set_mailbox", a, {})).connected === false, "a mailbox is connected before any was");
+    await refuses(call("set_mailbox", a, { ...box, password: "wrong-password" }), /refused the username or password/);
+    ok((await db.mailbox.count({ where: { userId: a.id } })) === 0, "a mailbox that failed to sign in was saved");
+    const got = await call("set_mailbox", a, { ...box, password: "right-password" });
+    ok(got.connected && got.verifiedAt, "it didn't connect");
+    ok(!JSON.stringify(got).includes("right-password"), "the password came back");
+    ok(!JSON.stringify(await call("set_mailbox", a, {})).includes("right-password"), "the status shows the password");
+    await call("set_mailbox", b, { ...box, from_email: `b-${stamp}@probe.invalid`, password: "right-password" });
+  });
+
+  await check("someone who applies gets one receipt, from the person's address, saying only that it arrived", async () => {
+    const before = smtp.received.length;
+    const r = await publicData.submitApplication(slug, payload("Rae Probe", `rae-${stamp}@probe.invalid`, "Yes"));
+    await mailboxData.sendReceipt(r.userId, r.applicationId);
+    await mailboxData.sendReceipt(r.userId, r.applicationId);
+    ok(smtp.received.length === before + 1, `${smtp.received.length - before} receipts went out`);
+    const mail = smtp.received.at(-1);
+    ok(mail.rcpt.some((l) => l.includes(`rae-${stamp}@probe.invalid`)), "the receipt went to someone else");
+    ok(mail.data.includes(`hiring-${stamp}@probe.invalid`), "the receipt isn't from the person's address");
+    const row = await db.message.findFirst({ where: { applicationId: r.applicationId, kind: "RECEIPT" } });
+    ok(row?.status === "SENT" && row.sentVia === "mailbox", `the receipt is ${row?.status} via ${row?.sentVia}`);
+    ok(/Hi Rae,/.test(row.body) && /Operations Virtual Assistant/.test(row.body), "the receipt's placeholders weren't filled");
+  });
+
+  await check("with receipts off, someone who applies gets nothing", async () => {
+    await call("set_mailbox", a, { receipt_on: false });
+    const before = smtp.received.length;
+    const r = await publicData.submitApplication(slug, payload("Sol Probe", `sol-${stamp}@probe.invalid`, "Yes"));
+    ok((await mailboxData.sendReceipt(r.userId, r.applicationId)) === null, "a receipt was made");
+    ok(smtp.received.length === before, "a receipt went out with receipts off");
+    await call("set_mailbox", a, { receipt_on: true });
+  });
+
+  await check("a draft goes out once, through send_message, to the applicant on file", async () => {
+    const draft = await call("save_message", a, { application_id: passing.applicationId, kind: "OTHER", subject: "Next step", body: "Hi Ana, a quick question." });
+    const before = smtp.received.length;
+    const sent = await call("send_message", a, { message_id: draft.id });
+    ok(sent.status === "SENT" && sent.sentVia === "mailbox", `send_message left it ${sent.status}`);
+    ok(smtp.received.length === before + 1, "nothing reached the mail server");
+    ok(smtp.received.at(-1).rcpt.some((l) => l.includes(`ana-${stamp}@probe.invalid`)), "it went to someone else");
+    await refuses(call("send_message", a, { message_id: draft.id }), /already sent/);
+  });
+
+  await check("a mail server that refuses leaves the draft a draft, with the reason", async () => {
+    const draft = await call("save_message", a, { application_id: passing.applicationId, kind: "OTHER", body: "Hi Ana." });
+    await db.mailbox.update({ where: { userId: a.id }, data: { password: "wrong-password" } });
+    await refuses(call("send_message", a, { message_id: draft.id }), /Not sent/);
+    const row = await db.message.findUnique({ where: { id: draft.id } });
+    ok(row.status === "DRAFT" && row.sendError, `the failed draft is ${row.status} with "${row.sendError}"`);
+    await db.mailbox.update({ where: { userId: a.id }, data: { password: "right-password" } });
+  });
+
+  await check("nothing goes past the daily limit, and nothing goes without a mailbox", async () => {
+    const draft = await call("save_message", a, { application_id: passing.applicationId, kind: "OTHER", body: "Hi Ana, again." });
+    const sentAt = new Date();
+    await db.message.createMany({
+      data: Array.from({ length: mailboxData.DAILY_LIMIT }, () => ({ userId: a.id, applicationId: passing.applicationId, kind: "OTHER", status: "SENT", body: "filler", sentVia: "mailbox", sentAt })),
+    });
+    await refuses(call("send_message", a, { message_id: draft.id }), /in the last 24 hours/);
+    await db.message.deleteMany({ where: { userId: a.id, body: "filler" } });
+    await call("set_mailbox", a, { disconnect: true });
+    await refuses(call("send_message", a, { message_id: draft.id }), /No mailbox/);
+    ok((await db.message.findUnique({ where: { id: draft.id } })).status === "DRAFT", "a refused send changed the draft");
+    // Connected again, so the crossing below is refused by the workspace
+    // boundary and not by a missing mailbox: A could send this draft.
+    await call("set_mailbox", a, { host: "127.0.0.1", port: smtp.port, security: "none", username: "a@probe.invalid", password: "right-password", from_email: `hiring-${stamp}@probe.invalid` });
+    sendable = draft.id;
+  });
+
   await check("the careers page lists only open jobs with a live careers listing, and only that apply page is indexable", async () => {
     const set = await call("update_company", a, { careers_slug: `probe-${stamp}` });
     ok(set.careersUrl === `${BASE}/careers/probe-${stamp}`, `careersUrl is ${set.careersUrl}`);
@@ -429,6 +560,7 @@ try {
     ["prep_message", { application_id: ids.application_id, kind: "REJECTION" }],
     ["save_message", { application_id: ids.application_id, kind: "OTHER", body: "x" }],
     ["save_message", { message_id: message.id, status: "SENT" }],
+    ["send_message", { message_id: sendable }],
     ["save_probes", { application_id: ids.application_id, probes: [] }],
     ["request_reference", { application_id: ids.application_id, name: "Spy" }],
     ["close_out_job", { job_id: ids.job_id, dry_run: true }],
@@ -488,6 +620,7 @@ try {
   await db.setting.deleteMany({ where: { key: { startsWith: "turnstile." } } });
   await db.user.deleteMany({ where: { id: { in: made } } });
   await db.$disconnect();
+  smtp.server.close();
 }
 
 for (const f of failures) console.error(`FAIL ${f}`);

@@ -50,6 +50,7 @@ model User {
   scorecards   Scorecard[]
   offers       Offer[]
   references   Reference[]
+  mailbox      Mailbox?
 }
 
 model Session {
@@ -383,6 +384,7 @@ model Note {
 }
 
 enum MessageKind {
+  RECEIPT
   SCREENING_INVITE
   INTERVIEW_INVITE
   REJECTION
@@ -395,10 +397,11 @@ enum MessageStatus {
   SENT
 }
 
-/// A message to an applicant. This server never sends mail: a draft is sent by
-/// the person from their own email (the app's "Open in email", or their
-/// assistant's mail connector) and then marked SENT, so the log says what each
-/// applicant was told and when.
+/// A message to an applicant. A draft goes out one of two ways: from the
+/// person's own connected mailbox (sentVia "mailbox", only after they said
+/// send), or from their own email by hand (the app's "Open in email", or their
+/// assistant's mail connector) and then marked SENT (sentVia ""). Either way
+/// the log says what each applicant was told and when.
 model Message {
   id            String        @id @default(cuid())
   userId        String
@@ -409,6 +412,10 @@ model Message {
   body          String
   /// "app" or "mcp"
   writtenBy     String        @default("mcp")
+  /// "mailbox" when Recruited sent it over the person's SMTP; "" when marked sent by hand.
+  sentVia       String        @default("")
+  /// Why the last send from the mailbox failed, if it did. Cleared on success.
+  sendError     String        @default("")
   sentAt        DateTime?
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
@@ -575,4 +582,30 @@ model ErrorEvent {
   createdAt DateTime @default(now())
 
   @@index([createdAt])
+}
+
+/// The person's own mailbox, over SMTP. Mail to applicants goes from this
+/// address and nowhere else; the server never sends as itself. The password is
+/// never returned by any read. One per workspace.
+model Mailbox {
+  id             String    @id @default(cuid())
+  userId         String    @unique
+  host           String
+  port           Int
+  /// "tls" (implicit, usually 465), "starttls" (usually 587) or "none" (a relay on a private network only)
+  security       String    @default("starttls")
+  username       String
+  password       String
+  fromEmail      String
+  fromName       String    @default("")
+  /// Send a receipt to everyone who applies through an apply link.
+  receiptOn      Boolean   @default(true)
+  /// Empty means the built-in wording.
+  receiptSubject String    @default("")
+  receiptBody    String    @default("")
+  verifiedAt     DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }

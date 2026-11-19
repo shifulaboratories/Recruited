@@ -10,6 +10,7 @@ import * as listings from "@/lib/data/listings";
 import * as applications from "@/lib/data/applications";
 import * as connections from "@/lib/data/connections";
 import * as messages from "@/lib/data/messages";
+import * as mailbox from "@/lib/data/mailbox";
 import * as imports from "@/lib/data/imports";
 import * as interviews from "@/lib/data/interviews";
 import * as probes from "@/lib/data/probes";
@@ -194,6 +195,55 @@ export async function markMessageSent(messageId: string) {
   const user = await requireUser();
   const m = await messages.updateMessage(user.id, messageId, { status: "SENT" });
   revalidatePath(`/applications/${m.applicationId}`);
+}
+
+/** The Send button on a draft. The click is the person's yes. */
+export async function sendMessageAction(_: ActionState, form: FormData): Promise<ActionState> {
+  const user = await requireUser();
+  const id = String(form.get("messageId") ?? "");
+  const r = await attempt(() => mailbox.sendMessage(user.id, id).then(() => {}), "Sent.");
+  revalidatePath(`/applications/${String(form.get("applicationId") ?? "")}`);
+  return r;
+}
+
+export async function connectMailboxAction(_: ActionState, form: FormData): Promise<ActionState> {
+  const user = await requireUser();
+  const r = await attempt(
+    () =>
+      mailbox
+        .connectMailbox(user.id, {
+          host: String(form.get("host") ?? ""),
+          port: Number(form.get("port")) || undefined,
+          security: String(form.get("security") ?? "starttls"),
+          username: String(form.get("username") ?? ""),
+          password: String(form.get("password") ?? "") || undefined,
+          fromEmail: String(form.get("fromEmail") ?? ""),
+          fromName: String(form.get("fromName") ?? ""),
+        })
+        .then(() => {}),
+    "Signed in and saved. Receipts go out from this address now.",
+  );
+  revalidatePath("/settings");
+  return r;
+}
+
+export async function disconnectMailboxAction() {
+  const user = await requireUser();
+  await mailbox.disconnectMailbox(user.id);
+  revalidatePath("/settings");
+}
+
+export async function saveReceiptAction(_: ActionState, form: FormData): Promise<ActionState> {
+  const user = await requireUser();
+  const r = await attempt(
+    () =>
+      mailbox
+        .setReceipt(user.id, { on: form.get("on") === "on", subject: String(form.get("subject") ?? ""), body: String(form.get("body") ?? "") })
+        .then(() => {}),
+    "Saved.",
+  );
+  revalidatePath("/settings");
+  return r;
 }
 
 export async function deleteMessageDraft(applicationId: string, messageId: string) {
