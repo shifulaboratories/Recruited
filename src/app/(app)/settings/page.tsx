@@ -11,6 +11,7 @@ import {
   wipeSampleAction,
 } from "@/server/actions";
 import { getMailbox } from "@/lib/data/mailbox";
+import { MAX_RETENTION_MONTHS, privacyNotice } from "@/lib/privacy";
 import { spamCheckStatus } from "@/lib/data/settings";
 import { hasSample } from "@/lib/data/sample";
 import { ActionForm, CopyButton } from "@/components/forms";
@@ -79,6 +80,20 @@ export default async function SettingsPage() {
             </span>
             <input className="field" name="careersSlug" placeholder="acme" defaultValue={user.careersSlug ?? ""} />
           </label>
+          <div className="grid grid-cols-1 sm:grid-cols-[150px_1fr] gap-3">
+            <label className="block space-y-1">
+              <span className="text-rt-muted">Keep applicants for (months)</span>
+              <input className="field" name="retentionMonths" type="number" min={0} max={MAX_RETENTION_MONTHS} defaultValue={user.retentionMonths} />
+            </label>
+            <label className="block space-y-1">
+              <span className="text-rt-muted">Address for data requests</span>
+              <input className="field" name="privacyEmail" type="email" placeholder={mail.connected ? mail.fromEmail : "privacy@yourcompany.com"} defaultValue={user.privacyEmail} />
+            </label>
+          </div>
+          <p className="text-[12.5px] text-rt-faint">
+            Every apply form says: &ldquo;{privacyNotice({ company: user.companyName, retentionMonths: user.retentionMonths, contactEmail: user.privacyEmail || (mail.connected ? mail.fromEmail : "") })}&rdquo;
+            Recruited deletes an applicant&apos;s data that long after their role closes, except people you hire. 0 keeps it until you delete it.
+          </p>
           {user.careersSlug && (
             <p className="text-[12.5px]">
               <a className="text-rt-primary underline" href={`/careers/${user.careersSlug}`} target="_blank" rel="noreferrer">

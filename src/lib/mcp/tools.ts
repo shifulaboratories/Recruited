@@ -6,6 +6,7 @@ import * as applications from "@/lib/data/applications";
 import * as uploads from "@/lib/data/uploads";
 import * as messages from "@/lib/data/messages";
 import * as mailbox from "@/lib/data/mailbox";
+import * as privacy from "@/lib/data/privacy";
 import * as imports from "@/lib/data/imports";
 import * as interviews from "@/lib/data/interviews";
 import * as probes from "@/lib/data/probes";
@@ -887,10 +888,37 @@ export const TOOLS: McpTool[] = [
     },
   },
   {
+    name: "export_applicant_data",
+    title: "Export everything held about one applicant",
+    description:
+      "Reach for this when an applicant asks what you hold about them (a data access request), or the person wants one applicant's whole record in one place. " +
+      "Find them by application_id or by email. Returns everything this workspace holds about that person, archived applications included: contact details, every application with stage and tier, every answer with how it arrived, files by name, messages, notes, interviews with scorecards, offers and what references said (not the referees' own contact details). " +
+      "Read-only. Notes and scorecards are in it because they are about the applicant; tell the person that before they send it on, and let them decide what to share. The app's applicant page has the same export as a download.",
+    inputSchema: object({ application_id: str("Any of their applications' ids."), email: str("Their email address, when you don't have an id.") }),
+    annotations: READ,
+    handler: (args, ctx) => privacy.exportApplicantData(ctx.userId, { applicationId: s(args, "application_id"), email: s(args, "email") }),
+  },
+  {
+    name: "delete_applicant_data",
+    title: "Delete everything held about one applicant",
+    description:
+      "PERMANENT. Deletes one person and everything about them in this workspace: every application (archived ones too), answers, files, messages, notes, interviews, scorecards, offers and references. There is no undo and no archive. " +
+      "Reach for it when an applicant asks to be deleted, or the person says to remove someone's data. To take someone out of a list without deleting them, archive the application instead. " +
+      "dry_run defaults to true and only says what would go. Show the person that list, get a plain yes for this person, then call again with dry_run false. Find them by application_id or by email.",
+    inputSchema: object({
+      application_id: str("Any of their applications' ids."),
+      email: str("Their email address, when you don't have an id."),
+      dry_run: bool("true (default) lists what would be deleted and deletes nothing. false deletes it for good."),
+    }),
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
+    handler: (args, ctx) =>
+      privacy.deleteApplicantData(ctx.userId, { applicationId: s(args, "application_id"), email: s(args, "email") }, args.dry_run !== false),
+  },
+  {
     name: "daily_brief",
     title: "Daily brief",
     description:
-      "Everything that needs the person today, in one read: who applied since yesterday (or since), tier proposals waiting for a decision, applicants in SCREEN who haven't answered their screening form, interviews in the next 48 hours (with how many follow-up questions are still unasked), interviews waiting for the applicant to pick a time, interviews with no scorecard, unsent drafts, references that came in and offers waiting on an answer. " +
+      "Everything that needs the person today, in one read: who applied since yesterday (or since), tier proposals waiting for a decision, applicants in SCREEN who haven't answered their screening form, interviews in the next 48 hours (with how many follow-up questions are still unasked), interviews waiting for the applicant to pick a time, interviews with no scorecard, unsent drafts, references that came in, offers waiting on an answer, and how many applications the retention period deletes in the next 30 days. " +
       "Reach for it for 'what's on today', 'catch me up', 'what needs me'. Lead with what needs a decision or is time-bound; skip empty sections; give times in the person's time zone. Read-only.",
     inputSchema: object({ since: str("Count new things from this moment, ISO 8601. Defaults to 24 hours ago.") }),
     annotations: READ,
@@ -1006,12 +1034,15 @@ export const TOOLS: McpTool[] = [
     description:
       "The company every public job page shows: its name, a few sentences about it, and its website. Changes only what you send. Write about in plain words from what the person tells you (what you make, who for, how you work), three or four sentences; never invent size, funding or perks. " +
       "careers_slug sets the careers page's address, /careers/<slug>: a public page listing every open job that has a LIVE listing on the careers board, which is also the only kind of apply page search engines and Google for Jobs may index. Ask the person what they want it called; their company name in lowercase is the usual choice. Empty string takes the page down. " +
-      "Returns the careers page's full URL once a slug is set.",
+      "retention_months and privacy_email set what every apply form's privacy notice tells applicants: how long their data is kept after the role closes (default 12; 0 keeps it until someone deletes it) and where to write to see or delete it. Recruited enforces the period itself: once a day it deletes applications whose job closed longer ago than that, except hires, and the daily brief warns 30 days ahead. Ask the person for both rather than choosing; laws differ by country. " +
+      "Returns the careers page's full URL once a slug is set, and the privacy settings.",
     inputSchema: object({
       company_name: str("The company's name."),
       about: str("A few sentences about the company, plain text."),
       website: str("Full address, starting with https://. Empty string clears it."),
       careers_slug: str("Lowercase letters, numbers and dashes, e.g. 'acme'. Empty string takes the careers page down."),
+      retention_months: num("Months to keep an applicant's data after their role closes, 0 to 120. 0 keeps it until deleted."),
+      privacy_email: str("The address applicants write to about their data, shown on every apply form. Empty string falls back to the connected mailbox's address, if any."),
     }),
     annotations: SET,
     handler: async (args, ctx) => {
@@ -1021,11 +1052,14 @@ export const TOOLS: McpTool[] = [
         companyWebsite: s(args, "website"),
         careersSlug: s(args, "careers_slug"),
       });
+      const p = await privacy.setRetention(ctx.userId, { months: n(args, "retention_months"), privacyEmail: s(args, "privacy_email") });
       return {
         companyName: u.companyName,
         about: u.companyAbout,
         website: u.companyWebsite,
         careersUrl: u.careersSlug ? `${ctx.baseUrl}${careersPath(u.careersSlug)}` : null,
+        retentionMonths: p.retentionMonths,
+        privacyEmail: p.privacyEmail,
       };
     },
   },

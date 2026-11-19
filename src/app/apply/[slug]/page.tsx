@@ -140,6 +140,7 @@ export default async function ApplyPage({ params }: { params: Promise<{ slug: st
               nextSteps={l.afterApply}
               company={l.company}
               turnstileSiteKey={turnstile}
+              privacyNotice={l.privacyNotice}
             />
           ) : (
             <p className="text-rt-muted">This role isn&apos;t taking applications any more.</p>

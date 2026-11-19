@@ -175,6 +175,7 @@ export function PublicForm({
   nextSteps,
   company,
   turnstileSiteKey,
+  privacyNotice,
 }: {
   questions: FormQuestion[];
   endpoint: string;
@@ -187,6 +188,8 @@ export function PublicForm({
   company?: string;
   /** Set when the owner turned on Cloudflare Turnstile; the widget then sits above the send button. */
   turnstileSiteKey?: string | null;
+  /** Who gets the application, how long it's kept and where to write. Shown on the apply form. */
+  privacyNotice?: string;
 }) {
   const { bind, snapshot } = useRecorder();
   const startedAt = useRef(Date.now());
@@ -353,6 +356,7 @@ export function PublicForm({
           This form notes how each written answer is entered (typed, pasted, or filled in some other way) and shares that with the hiring team. It
           keeps counts and timings, not your keystrokes, and nothing is sent until you press the button. Using tools to help you write is your call;
           this just lets the team see how the answer got here.
+          {privacyNotice && <span className="block mt-1.5">{privacyNotice}</span>}
         </span>
       </p>
 

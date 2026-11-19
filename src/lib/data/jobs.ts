@@ -62,6 +62,7 @@ export async function createJob(userId: string, input: JobInput & { title: strin
       rubric: input.rubric ?? "",
       afterApply: input.afterApply ?? "",
       status: input.status ?? "DRAFT",
+      closedAt: input.status === "CLOSED" ? new Date() : null,
     },
   });
 }
@@ -69,9 +70,12 @@ export async function createJob(userId: string, input: JobInput & { title: strin
 /** Changes only the fields given. */
 export async function updateJob(userId: string, jobId: string, input: JobInput) {
   check(input);
-  await requireJob(userId, jobId);
+  const job = await requireJob(userId, jobId);
   const data: Prisma.JobUpdateInput = {};
   for (const [k, v] of Object.entries(input)) if (v !== undefined) (data as Record<string, unknown>)[k] = v;
+  // The retention clock (privacy.ts) starts when a job closes, and stops if it reopens.
+  if (input.status === "CLOSED" && job.status !== "CLOSED") data.closedAt = new Date();
+  if (input.status && input.status !== "CLOSED") data.closedAt = null;
   if (typeof data.salaryCurrency === "string") data.salaryCurrency = data.salaryCurrency.toUpperCase();
   return db.job.update({ where: { id: jobId }, data });
 }
@@ -83,8 +87,8 @@ export async function requireJob(userId: string, jobId: string) {
 }
 
 export async function archiveJob(userId: string, jobId: string) {
-  await requireJob(userId, jobId);
-  return db.job.update({ where: { id: jobId }, data: { archivedAt: new Date(), status: "CLOSED" } });
+  const job = await requireJob(userId, jobId);
+  return db.job.update({ where: { id: jobId }, data: { archivedAt: new Date(), status: "CLOSED", closedAt: job.closedAt ?? new Date() } });
 }
 
 const STAGES: Stage[] = ["NEW", "SCREEN", "INTERVIEW", "OFFER", "HIRED", "REJECTED"];

@@ -5,6 +5,7 @@ import { failedKnockouts, FILE_TYPES, readQuestions, validateAnswer, WRITTEN_TYP
 import { classifyOrigin, readTelemetry, styleSignals } from "@/lib/provenance";
 import { secret } from "@/lib/ids";
 import { publicStatusOf } from "@/lib/applicant-status";
+import { privacyNotice } from "@/lib/privacy";
 import { checkReferenceAnswers, REFERENCE_QUESTIONS } from "@/lib/references";
 import { accepts, acceptLabel, cleanFilename, isVideo, MAX_FILE_BYTES, MAX_TOTAL_BYTES, MAX_VIDEO_BYTES, sniffMime } from "@/lib/files";
 
@@ -37,7 +38,7 @@ export async function publicListing(listingSlug: string) {
     where: { slug: listingSlug },
     include: {
       job: { include: { forms: { where: { kind: "APPLICATION" } } } },
-      user: { select: { companyName: true, companyAbout: true, companyWebsite: true, mailbox: { select: { receiptOn: true } } } },
+      user: { select: { companyName: true, companyAbout: true, companyWebsite: true, retentionMonths: true, privacyEmail: true, mailbox: { select: { receiptOn: true, fromEmail: true } } } },
     },
   });
   if (!l || l.job.archivedAt) return null;
@@ -54,6 +55,12 @@ export async function publicListing(listingSlug: string) {
     companyWebsite: l.user.companyWebsite,
     /** Whether a receipt is emailed after applying, so the thank-you page doesn't say otherwise. */
     emailsReceipt: !!l.user.mailbox?.receiptOn,
+    /** Who gets the application, how long it's kept, where to write. The rule it states is the one privacy.ts enforces. */
+    privacyNotice: privacyNotice({
+      company: l.user.companyName,
+      retentionMonths: l.user.retentionMonths,
+      contactEmail: l.user.privacyEmail || l.user.mailbox?.fromEmail || "",
+    }),
     afterApply: l.job.afterApply,
     board: l.board,
     title: l.title,

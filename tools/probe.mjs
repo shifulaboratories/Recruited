@@ -18,6 +18,8 @@
  *     never past the daily limit (against a fake SMTP server in this file);
  *   - an applicant's status page never says closed before they were told,
  *     and shows no tier, note, answer or contact detail;
+ *   - an applicant's data comes out whole and is deleted whole, on request
+ *     or when the retention period runs out, and hires are kept;
  *   - the MCP transport lists every tool and renders every prompt.
  *
  * It REFUSES any database whose name does not contain "probe", because it
@@ -54,6 +56,7 @@ const ratelimit = await load("data/ratelimit.ts");
 const usersData = await load("data/users.ts");
 const systemData = await load("data/system.ts");
 const mailboxData = await load("data/mailbox.ts");
+const privacyData = await load("data/privacy.ts");
 
 const BASE = "http://probe.invalid";
 const called = new Set();
@@ -487,6 +490,67 @@ try {
     sendable = draft.id;
   });
 
+  await check("the apply form states the workspace's own retention and contact, and bad settings are refused", async () => {
+    const set = await call("update_company", a, { retention_months: 6, privacy_email: `privacy-${stamp}@probe.invalid` });
+    ok(set.retentionMonths === 6 && set.privacyEmail === `privacy-${stamp}@probe.invalid`, `saved ${JSON.stringify(set)}`);
+    const notice = (await publicData.publicListing(slug)).privacyNotice;
+    ok(/6 months/.test(notice) && notice.includes(`privacy-${stamp}@probe.invalid`), `the form says: ${notice}`);
+    await refuses(call("update_company", a, { retention_months: -1 }), /0 \(keep until deleted\)/);
+    await refuses(call("update_company", a, { privacy_email: "not an address" }), /email address/);
+    await call("update_company", a, { retention_months: 12, privacy_email: "" });
+  });
+
+  await check("an applicant's export holds everything about them, archived applications too, and no one else", async () => {
+    const extra = await call("create_job", a, { title: "Export Probe Role", status: "OPEN" });
+    const second = await call("add_applicant", a, { job_id: extra.id, name: "Ana Probe", email: `ana-${stamp}@probe.invalid` });
+    await appsData.archiveApplication(a.id, second.id ?? second.applicationId);
+    await call("add_note", a, { application_id: passing.applicationId, body: "export-note-probe" });
+    const got = await call("export_applicant_data", a, { email: `ANA-${stamp}@probe.invalid` });
+    ok(got.person.email === `ana-${stamp}@probe.invalid`, "the export is someone else's");
+    ok(got.applications.length >= 2 && got.applications.some((x) => x.archived), `${got.applications.length} applications, archived one missing`);
+    const text = JSON.stringify(got);
+    ok(text.includes("Zendesk") && text.includes("export-note-probe") && text.includes("desk.png"), "answers, notes or files are missing");
+    ok(!text.includes(`ben-${stamp}`), "another applicant is in the export");
+    await refuses(call("export_applicant_data", b, { email: `ana-${stamp}@probe.invalid` }), /Nobody with that email/);
+    await jobsData.archiveJob(a.id, extra.id);
+  });
+
+  await check("deleting an applicant's data is a dry run until asked, then takes everything", async () => {
+    const r = await publicData.submitApplication(slug, payload("Del Probe", `del-${stamp}@probe.invalid`, "Yes"));
+    const dry = await call("delete_applicant_data", a, { application_id: r.applicationId });
+    ok(dry.dryRun === true && dry.wouldDelete.name === "Del Probe", "the default isn't a dry run");
+    ok(await db.application.findUnique({ where: { id: r.applicationId } }), "a dry run deleted the application");
+    const uploadsBefore = await db.upload.count({ where: { userId: a.id } });
+    await call("delete_applicant_data", a, { email: `del-${stamp}@probe.invalid`, dry_run: false });
+    ok(!(await db.application.findUnique({ where: { id: r.applicationId } })), "the application survived");
+    ok(!(await db.candidate.findFirst({ where: { userId: a.id, email: `del-${stamp}@probe.invalid` } })), "the person survived");
+    ok((await db.upload.count({ where: { userId: a.id } })) === uploadsBefore - 1, "their file survived");
+  });
+
+  await check("retention deletes applications from long-closed jobs, keeps hires, and warns first", async () => {
+    const old = await call("create_job", a, { title: "Retention Probe Role", status: "OPEN" });
+    const gone = await call("add_applicant", a, { job_id: old.id, name: "Old Probe", email: `old-${stamp}@probe.invalid` });
+    const hired = await call("add_applicant", a, { job_id: old.id, name: "Hire Probe", email: `hire-${stamp}@probe.invalid` });
+    const goneId = gone.id ?? gone.applicationId;
+    const hiredId = hired.id ?? hired.applicationId;
+    await call("move_stage", a, { application_id: hiredId, stage: "HIRED" });
+    await call("update_job", a, { job_id: old.id, status: "CLOSED" });
+    ok((await db.job.findUnique({ where: { id: old.id } })).closedAt, "closing the job didn't start the clock");
+    await db.job.update({ where: { id: old.id }, data: { closedAt: new Date(Date.now() - 350 * 86400_000) } });
+    const brief = await call("daily_brief", a, {});
+    ok(brief.deletedWithin30Days?.count >= 1, "the brief doesn't warn before deleting");
+    await privacyData.retentionSweep();
+    ok(await db.application.findUnique({ where: { id: goneId } }), "the sweep deleted early");
+    await db.job.update({ where: { id: old.id }, data: { closedAt: new Date(Date.now() - 400 * 86400_000) } });
+    await privacyData.retentionSweep();
+    ok(!(await db.application.findUnique({ where: { id: goneId } })), "an application past retention survived");
+    ok(!(await db.candidate.findFirst({ where: { userId: a.id, email: `old-${stamp}@probe.invalid` } })), "their person survived");
+    ok(await db.application.findUnique({ where: { id: hiredId } }), "the sweep deleted a hire");
+    await call("update_job", a, { job_id: old.id, status: "OPEN" });
+    ok((await db.job.findUnique({ where: { id: old.id } })).closedAt === null, "reopening didn't stop the clock");
+    await jobsData.archiveJob(a.id, old.id);
+  });
+
   await check("the careers page lists only open jobs with a live careers listing, and only that apply page is indexable", async () => {
     const set = await call("update_company", a, { careers_slug: `probe-${stamp}` });
     ok(set.careersUrl === `${BASE}/careers/probe-${stamp}`, `careersUrl is ${set.careersUrl}`);
@@ -584,6 +648,8 @@ try {
     ["save_message", { application_id: ids.application_id, kind: "OTHER", body: "x" }],
     ["save_message", { message_id: message.id, status: "SENT" }],
     ["send_message", { message_id: sendable }],
+    ["export_applicant_data", { application_id: ids.application_id }],
+    ["delete_applicant_data", { application_id: ids.application_id }],
     ["save_probes", { application_id: ids.application_id, probes: [] }],
     ["request_reference", { application_id: ids.application_id, name: "Spy" }],
     ["close_out_job", { job_id: ids.job_id, dry_run: true }],
