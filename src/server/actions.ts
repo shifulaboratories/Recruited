@@ -208,6 +208,7 @@ export async function sendMessageAction(_: ActionState, form: FormData): Promise
 
 export async function connectMailboxAction(_: ActionState, form: FormData): Promise<ActionState> {
   const user = await requireUser();
+  const siteUrl = await baseUrl();
   const r = await attempt(
     () =>
       mailbox
@@ -219,6 +220,7 @@ export async function connectMailboxAction(_: ActionState, form: FormData): Prom
           password: String(form.get("password") ?? "") || undefined,
           fromEmail: String(form.get("fromEmail") ?? ""),
           fromName: String(form.get("fromName") ?? ""),
+          siteUrl,
         })
         .then(() => {}),
     "Signed in and saved. Receipts go out from this address now.",
@@ -235,10 +237,11 @@ export async function disconnectMailboxAction() {
 
 export async function saveReceiptAction(_: ActionState, form: FormData): Promise<ActionState> {
   const user = await requireUser();
+  const siteUrl = await baseUrl();
   const r = await attempt(
     () =>
       mailbox
-        .setReceipt(user.id, { on: form.get("on") === "on", subject: String(form.get("subject") ?? ""), body: String(form.get("body") ?? "") })
+        .setReceipt(user.id, { on: form.get("on") === "on", subject: String(form.get("subject") ?? ""), body: String(form.get("body") ?? ""), siteUrl })
         .then(() => {}),
     "Saved.",
   );

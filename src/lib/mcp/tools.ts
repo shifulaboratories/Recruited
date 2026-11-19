@@ -19,6 +19,7 @@ import * as settings from "@/lib/data/settings";
 import * as system from "@/lib/data/system";
 import { UserError } from "@/lib/data/errors";
 import { careersPath } from "@/lib/data/public";
+import { statusPath } from "@/lib/applicant-status";
 import { BOARDS, BOARD_KEYS, boardByKey } from "@/lib/boards";
 import { QUESTION_TYPES } from "@/lib/forms";
 import { MESSAGE_KINDS } from "@/lib/messages";
@@ -439,17 +440,19 @@ export const TOOLS: McpTool[] = [
       "Read origin as observation and style as a weak hint: pasting from your own notes is pasting, and second-language writers trip style signals. Never call someone a cheat or reject them on provenance alone; " +
       "say what was observed ('pasted after 40 seconds away from the page', 'likely written with AI') and weigh it against what they said. " +
       "Answers to file questions list their files; read_upload opens one (video answers are listed but can't be read here; the person watches them in the app). " +
-      "Also returns interviews with their scorecards and any booking link, where the panel stands, every offer version, saved follow-up questions (probes), reference checks with what referees said, and the read-only share link if it's on.",
+      "Also returns interviews with their scorecards and any booking link, where the panel stands, every offer version, saved follow-up questions (probes), reference checks with what referees said, the read-only share link if it's on, " +
+      "and statusPage: the applicant's own page (received, under review, closed, plus forms and times waiting on them). It's personal to them; put it only in mail to this applicant.",
     inputSchema: object({ application_id: str("The application's id.") }, ["application_id"]),
     annotations: READ,
     handler: async (args, ctx) => {
       const id = need(args, "application_id");
-      const { screenToken: _t, sharePath, ...rest } = await applications.getApplication(ctx.userId, id);
+      const { screenToken, sharePath, ...rest } = await applications.getApplication(ctx.userId, id);
       const io = await interviews.interviewsAndOffers(ctx.userId, id);
       const refs = await references.listReferences(ctx.userId, id);
       return {
         ...rest,
         shareLink: sharePath ? `${ctx.baseUrl}${sharePath}` : null,
+        statusPage: `${ctx.baseUrl}${statusPath(screenToken)}`,
         ...io,
         interviews: io.interviews.map(({ bookingPath, ...i }) => ({ ...i, bookingLink: bookingPath ? `${ctx.baseUrl}${bookingPath}` : null })),
         references: refs.map(({ path, ...r }) => ({ ...r, link: `${ctx.baseUrl}${path}` })),
@@ -767,7 +770,7 @@ export const TOOLS: McpTool[] = [
     title: "Prepare a message to an applicant",
     description:
       "Call this FIRST before writing any email to an applicant: a screening invite, an interview invite, a rejection, an offer. " +
-      "Returns who they are, the role, their stage and tier, their personal screening links (with whether they already filled each in and which files each asks for), every message they were sent before, and guidance for this kind of message. " +
+      "Returns who they are, the role, their stage and tier, their personal screening links (with whether they already filled each in and which files each asks for), their own status page, every message they were sent before, and guidance for this kind of message. " +
       "Follow the guidance. Never invent a time, a pay figure, a start date or a reason: if the person didn't give you one, ask. Never mention how an applicant's answers were typed or pasted in anything sent to them. " +
       "Then save the draft with save_message. Saves nothing itself.",
     inputSchema: object(
@@ -847,7 +850,7 @@ export const TOOLS: McpTool[] = [
       "To connect: host, port, security, username, password and from_email. For Gmail that's smtp.gmail.com, 587, starttls, their address, and an app password from their Google account (Security, App passwords; it needs 2-step verification on); for Microsoft 365, smtp.office365.com, 587, starttls. Ask for every value; never guess a server or a password. " +
       "A password typed into a conversation stays in its history, so offer Settings in the Recruited app as the place to type it; send it here only if they prefer. " +
       "It signs in to the server before saving and saves nothing if that fails. disconnect: true removes the mailbox. " +
-      "receipt_on turns the automatic receipt on or off (it's on once a mailbox is connected). receipt_subject and receipt_body replace its wording and may use {first_name}, {job}, {company} and {sender}; an empty string goes back to the built-in wording. A receipt says the application arrived. Don't let it promise a reply, a timeline or a decision unless the person wrote that promise themselves.",
+      "receipt_on turns the automatic receipt on or off (it's on once a mailbox is connected). receipt_subject and receipt_body replace its wording and may use {first_name}, {job}, {company}, {sender} and {status_link} (the applicant's own status page); an empty string goes back to the built-in wording. A receipt says the application arrived. Don't let it promise a reply, a timeline or a decision unless the person wrote that promise themselves.",
     inputSchema: object({
       host: str("The SMTP server, e.g. smtp.gmail.com."),
       port: num("Usually 587 (starttls) or 465 (tls)."),
@@ -874,11 +877,12 @@ export const TOOLS: McpTool[] = [
           password: s(args, "password"),
           fromEmail: need(args, "from_email"),
           fromName: s(args, "from_name"),
+          siteUrl: ctx.baseUrl,
         });
       }
       const on = typeof args.receipt_on === "boolean" ? args.receipt_on : undefined;
       if (on !== undefined || s(args, "receipt_subject") !== undefined || s(args, "receipt_body") !== undefined)
-        out = await mailbox.setReceipt(ctx.userId, { on, subject: s(args, "receipt_subject"), body: s(args, "receipt_body") });
+        out = await mailbox.setReceipt(ctx.userId, { on, subject: s(args, "receipt_subject"), body: s(args, "receipt_body"), siteUrl: ctx.baseUrl });
       return out ?? mailbox.getMailbox(ctx.userId);
     },
   },

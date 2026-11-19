@@ -16,6 +16,8 @@
  *   - mail goes only from a connected mailbox, to the applicant on file: the
  *     receipt once per application, a draft only through send_message, and
  *     never past the daily limit (against a fake SMTP server in this file);
+ *   - an applicant's status page never says closed before they were told,
+ *     and shows no tier, note, answer or contact detail;
  *   - the MCP transport lists every tool and renders every prompt.
  *
  * It REFUSES any database whose name does not contain "probe", because it
@@ -417,6 +419,27 @@ try {
     const row = await db.message.findFirst({ where: { applicationId: r.applicationId, kind: "RECEIPT" } });
     ok(row?.status === "SENT" && row.sentVia === "mailbox", `the receipt is ${row?.status} via ${row?.sentVia}`);
     ok(/Hi Rae,/.test(row.body) && /Operations Virtual Assistant/.test(row.body), "the receipt's placeholders weren't filled");
+    const app = await db.application.findUnique({ where: { id: r.applicationId } });
+    ok(row.body.includes(`${BASE}/status/${app.screenToken}`), "the receipt has no status link");
+  });
+
+  await check("an applicant's status page shows only what they've been told, and nothing private", async () => {
+    const r = await publicData.submitApplication(slug, payload("Ida Probe", `ida-${stamp}@probe.invalid`, "Yes"));
+    const token = (await db.application.findUnique({ where: { id: r.applicationId } })).screenToken;
+    const view = await publicData.publicApplicantStatus(token);
+    ok(view.status === "received" && view.firstName === "Ida", `a new application shows ${view.status}`);
+    await call("set_tier", a, { application_id: r.applicationId, tier: "C" });
+    await call("add_note", a, { application_id: r.applicationId, body: "private-note-probe" });
+    await call("move_stage", a, { application_id: r.applicationId, stage: "REJECTED" });
+    const before = await publicData.publicApplicantStatus(token);
+    ok(before.status === "in_review", `rejected but not told shows ${before.status}`);
+    const text = JSON.stringify(before);
+    ok(!/private-note-probe|"tier"|"C"|@probe\.invalid|PASTED|stage/.test(text), `the status page leaks: ${text.slice(0, 200)}`);
+    await call("save_message", a, { application_id: r.applicationId, kind: "REJECTION", body: "Thank you, we're not moving forward.", status: "SENT" });
+    ok((await publicData.publicApplicantStatus(token)).status === "closed", "a sent rejection doesn't close the page");
+    ok((await publicData.publicApplicantStatus("scr_nobody")) === null, "an unknown token opens a page");
+    await appsData.archiveApplication(a.id, r.applicationId);
+    ok((await publicData.publicApplicantStatus(token)) === null, "an archived application's page still opens");
   });
 
   await check("with receipts off, someone who applies gets nothing", async () => {

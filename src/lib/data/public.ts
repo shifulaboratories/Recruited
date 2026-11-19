@@ -1,17 +1,18 @@
 import { db } from "@/lib/db";
 import { UserError } from "@/lib/data/errors";
-import { upsertCandidate } from "@/lib/data/applications";
+import { screeningPath, upsertCandidate } from "@/lib/data/applications";
 import { failedKnockouts, FILE_TYPES, readQuestions, validateAnswer, WRITTEN_TYPES, type FormQuestion } from "@/lib/forms";
 import { classifyOrigin, readTelemetry, styleSignals } from "@/lib/provenance";
 import { secret } from "@/lib/ids";
+import { publicStatusOf } from "@/lib/applicant-status";
 import { checkReferenceAnswers, REFERENCE_QUESTIONS } from "@/lib/references";
 import { accepts, acceptLabel, cleanFilename, isVideo, MAX_FILE_BYTES, MAX_TOTAL_BYTES, MAX_VIDEO_BYTES, sniffMime } from "@/lib/files";
 
 /**
  * The unauthenticated paths into a workspace: the apply page
  * (/apply/<listing slug>), a screening form (/f/<form slug>?t=<token>), a
- * reference check (/ref/<token>), a booking page (/book/<token>) and a shared
- * applicant (/s/<slug>).
+ * reference check (/ref/<token>), a booking page (/book/<token>), a shared
+ * applicant (/s/<slug>) and an applicant's own status page (/status/<token>).
  *
  * Neither takes a userId, because the person on the other end has no account.
  * The owner is resolved from the row the unguessable slug names, never from
@@ -36,7 +37,7 @@ export async function publicListing(listingSlug: string) {
     where: { slug: listingSlug },
     include: {
       job: { include: { forms: { where: { kind: "APPLICATION" } } } },
-      user: { select: { companyName: true, companyAbout: true, companyWebsite: true } },
+      user: { select: { companyName: true, companyAbout: true, companyWebsite: true, mailbox: { select: { receiptOn: true } } } },
     },
   });
   if (!l || l.job.archivedAt) return null;
@@ -51,6 +52,8 @@ export async function publicListing(listingSlug: string) {
     company: l.user.companyName,
     companyAbout: l.user.companyAbout,
     companyWebsite: l.user.companyWebsite,
+    /** Whether a receipt is emailed after applying, so the thank-you page doesn't say otherwise. */
+    emailsReceipt: !!l.user.mailbox?.receiptOn,
     afterApply: l.job.afterApply,
     board: l.board,
     title: l.title,
@@ -223,6 +226,45 @@ export async function submitApplication(listingSlug: string, p: PublicPayload) {
     }
     return { applicationId: app.id, userId };
   });
+}
+
+/**
+ * An applicant's own status page, by the personal token in their screening
+ * links. It shows their application's public state (see applicant-status.ts),
+ * the screening forms still waiting for them, and interview times waiting for
+ * them to pick. Never a tier, a note, a score, an answer or how they compare.
+ */
+export async function publicApplicantStatus(token: string) {
+  if (!token || token.length > 200) return null;
+  const app = await db.application.findFirst({
+    where: { screenToken: token, archivedAt: null, job: { archivedAt: null } },
+    include: {
+      candidate: { select: { name: true } },
+      job: { select: { title: true, status: true, afterApply: true, forms: { where: { kind: "SCREENING" }, select: { id: true, name: true, slug: true } } } },
+      user: { select: { companyName: true, companyWebsite: true } },
+      submissions: { select: { formId: true } },
+      messages: { where: { status: "SENT" }, select: { kind: true, sentAt: true } },
+      interviews: { where: { status: "SCHEDULED", scheduledAt: null, bookToken: { not: null } }, select: { title: true, bookToken: true, slots: true } },
+    },
+  });
+  if (!app) return null;
+  const status = publicStatusOf({ stage: app.stage, jobStatus: app.job.status, rejectionSent: app.messages.some((m) => m.kind === "REJECTION") });
+  const done = new Set(app.submissions.map((s) => s.formId));
+  // A screening form appears only once the team has sent one: having a
+  // screening form on the job isn't the same as asking this person to fill it.
+  const invited = app.messages.some((m) => m.kind === "SCREENING_INVITE");
+  const open = status !== "closed";
+  return {
+    company: app.user.companyName,
+    companyWebsite: app.user.companyWebsite,
+    jobTitle: app.job.title,
+    firstName: app.candidate.name.trim().split(/\s+/)[0] || "",
+    appliedAt: app.createdAt,
+    status,
+    afterApply: app.job.afterApply,
+    forms: open && invited ? app.job.forms.filter((f) => !done.has(f.id)).map((f) => ({ name: f.name, path: screeningPath(app.screenToken, f.slug) })) : [],
+    toBook: open ? app.interviews.filter((i) => i.slots.length).map((i) => ({ title: i.title, path: `/book/${encodeURIComponent(i.bookToken!)}` })) : [],
+  };
 }
 
 export async function publicScreening(formSlug: string, token: string) {

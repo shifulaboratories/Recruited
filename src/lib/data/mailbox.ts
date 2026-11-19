@@ -3,6 +3,7 @@ import { notFound, UserError } from "@/lib/data/errors";
 import { recordError } from "@/lib/data/system";
 import { SECURITY, sendSmtp, smtpReason, verifySmtp, type SmtpConfig } from "@/lib/smtp";
 import { DEFAULT_RECEIPT_BODY, DEFAULT_RECEIPT_SUBJECT, renderReceipt } from "@/lib/messages";
+import { statusPath } from "@/lib/applicant-status";
 
 /**
  * The person's own mailbox, and the only way mail leaves this server.
@@ -63,7 +64,7 @@ export async function getMailbox(userId: string) {
  */
 export async function connectMailbox(
   userId: string,
-  input: { host: string; port?: number; security?: string; username: string; password?: string; fromEmail: string; fromName?: string },
+  input: { host: string; port?: number; security?: string; username: string; password?: string; fromEmail: string; fromName?: string; siteUrl?: string },
 ) {
   const existing = await db.mailbox.findUnique({ where: { userId } });
   const host = input.host.trim().toLowerCase();
@@ -85,9 +86,24 @@ export async function connectMailbox(
   } catch (e) {
     throw new UserError(`Nothing was saved: the mail server at ${host}:${port} said ${smtpReason(e)}.`);
   }
-  const data = { host, port, security, username, password, fromEmail, fromName, verifiedAt: new Date() };
+  const data = { host, port, security, username, password, fromEmail, fromName, verifiedAt: new Date(), ...siteUrlData(input.siteUrl) };
   const m = await db.mailbox.upsert({ where: { userId }, create: { userId, ...data }, update: data });
   return view(m, await sentLast24h(userId));
+}
+
+/**
+ * The address links in mail point at, recorded whenever the signed-in person
+ * saves mailbox settings. An applicant's request never sets it: its Host
+ * header is theirs to forge, and a receipt is mail from the person's account.
+ */
+function siteUrlData(siteUrl: string | undefined) {
+  if (!siteUrl) return {};
+  try {
+    const u = new URL(siteUrl);
+    return /^https?:$/.test(u.protocol) ? { siteUrl: u.origin } : {};
+  } catch {
+    return {};
+  }
 }
 
 export async function disconnectMailbox(userId: string) {
@@ -96,7 +112,7 @@ export async function disconnectMailbox(userId: string) {
 }
 
 /** Turn the receipt on or off, or change its words. Empty words go back to the built-in ones. */
-export async function setReceipt(userId: string, input: { on?: boolean; subject?: string; body?: string }) {
+export async function setReceipt(userId: string, input: { on?: boolean; subject?: string; body?: string; siteUrl?: string }) {
   const m = await db.mailbox.findUnique({ where: { userId } });
   if (!m) throw new UserError("Connect a mailbox first; the receipt goes out from it.");
   const subject = input.subject?.trim().slice(0, 200);
@@ -107,6 +123,7 @@ export async function setReceipt(userId: string, input: { on?: boolean; subject?
       ...(input.on !== undefined ? { receiptOn: input.on } : {}),
       ...(subject !== undefined ? { receiptSubject: subject } : {}),
       ...(body !== undefined ? { receiptBody: body } : {}),
+      ...siteUrlData(input.siteUrl),
     },
   });
   return view(saved, await sentLast24h(userId));
@@ -173,6 +190,7 @@ export async function sendReceipt(userId: string, applicationId: string) {
       job: a.job.title,
       company,
       sender: mailbox.fromName || a.user.name || company,
+      status_link: mailbox.siteUrl ? `${mailbox.siteUrl}${statusPath(a.screenToken)}` : "",
     };
     const message = await db.message.create({
       data: {

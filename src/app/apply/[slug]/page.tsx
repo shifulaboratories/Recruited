@@ -136,7 +136,7 @@ export default async function ApplyPage({ params }: { params: Promise<{ slug: st
               questions={l.questions}
               endpoint={`/api/apply/${slug}`}
               askIdentity
-              doneText={`Thanks for applying${l.company ? ` to ${l.company}` : ""}. A confirmation isn't emailed, so this page is your receipt.`}
+              doneText={`Thanks for applying${l.company ? ` to ${l.company}` : ""}. ${l.emailsReceipt ? "A confirmation is on its way to your email, with a link to check where your application stands." : "A confirmation isn't emailed, so this page is your receipt."}`}
               nextSteps={l.afterApply}
               company={l.company}
               turnstileSiteKey={turnstile}

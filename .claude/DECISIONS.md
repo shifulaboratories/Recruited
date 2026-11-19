@@ -294,3 +294,19 @@ itself, which is what that entry protected.
   probe run against its own fake SMTP server. The probe covers sign-in before save, the
   password never coming back, one receipt per application, receipts off, send once, a
   refusing server, the daily limit, no mailbox, and the cross-workspace refusal.
+
+## 2026-11-19 — The applicant status page follows what they were told, not the stage
+
+`/status/<token>` reuses the application's screen token, which already sits in every
+screening link the applicant has, rather than minting a second secret. It has three states.
+The one rule that matters: a stage is the team's working state, and a message is what the
+applicant was told. So REJECTED reads "under review" until a REJECTION message is SENT,
+and a screening form shows as waiting only after a SCREENING_INVITE was sent. Otherwise
+moving someone on the board would tell them before the email did. OFFER and HIRED never
+read closed, even after the job closes, because those people hear directly.
+
+The receipt links to the page. The link's origin is `Mailbox.siteUrl`, recorded whenever
+the signed-in person saves mailbox settings, and never comes from the applicant's request:
+the apply POST's Host and X-Forwarded-Host are theirs to forge, and a receipt is mail from
+the person's own account. Checked on the dev server: a POST with
+`X-Forwarded-Host: evil.example` still produced a localhost link.
