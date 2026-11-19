@@ -65,8 +65,15 @@ docs/PLAN.md                What's built, what's next, open questions.
 ```bash
 npm run typecheck
 npm run check     # tools/rules.test.mjs: boards, forms, provenance (Node 22.18+)
+npm run probe     # tools/probe.mjs: every tool against a database named *probe*
 npm run build
 ```
+
+The probe needs its own database (`createdb recruited_probe`, then
+`DATABASE_URL=…/recruited_probe npx prisma migrate deploy`) and refuses any other,
+because it creates and deletes accounts. It fails when a tool in `TOOLS` has no case,
+so a new tool gets one in the same commit, along with a cross-workspace line if it takes
+an id. `.github/workflows/gate.yml` runs all four on every pull request and on main.
 
 Then exercise the change for real: the MCP endpoint with curl, and the public form in a
 browser (the provenance recorder only runs there). Voice: plain, direct, second person,
