@@ -1,11 +1,13 @@
 import { bookSlot } from "@/lib/data/public";
 import { UserError } from "@/lib/data/errors";
+import { overLimit, TOO_MANY } from "@/lib/data/ratelimit";
 
 export const dynamic = "force-dynamic";
 
 /** An applicant picks one of the offered interview times. Public: the token names the interview. */
 export async function POST(request: Request, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
+  if (await overLimit(request, "book", token)) return Response.json({ error: TOO_MANY }, { status: 429 });
   let slot = "";
   try {
     const raw = (await request.json()) as { slot?: unknown };

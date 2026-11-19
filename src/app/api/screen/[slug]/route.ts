@@ -7,5 +7,5 @@ export const dynamic = "force-dynamic";
 export async function POST(request: Request, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const t = new URL(request.url).searchParams.get("t") ?? "";
-  return handlePublicSubmit(request, (p) => submitScreening(slug, t, p));
+  return handlePublicSubmit(request, "screen", slug, (p) => submitScreening(slug, t, p));
 }

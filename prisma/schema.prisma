@@ -526,3 +526,16 @@ model Reference {
 
   @@index([userId, applicationId])
 }
+
+/// Counts of public form posts per hashed address per hour, so one address
+/// can't flood an apply page. Instance-level, not content: it holds no IP,
+/// only a SHA-256 of it with the route, and rows older than a day are
+/// cleared on the next post.
+model RateHit {
+  key       String
+  window    DateTime
+  count     Int      @default(1)
+
+  @@id([key, window])
+  @@index([window])
+}

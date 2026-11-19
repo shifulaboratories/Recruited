@@ -248,6 +248,7 @@ export function PublicForm({
     const payload = JSON.stringify({
       name: String(fd.get("name") ?? ""),
       email: String(fd.get("email") ?? ""),
+      trap: String(fd.get("trap") ?? ""),
       answers,
       telemetry: snapshot(answers),
       recorded: true,
@@ -317,6 +318,13 @@ export function PublicForm({
 
   return (
     <form ref={formRef} onSubmit={onSubmit} onInput={recount} onChange={recount} className="space-y-6" noValidate>
+      {/* Left empty by people, who never see it; software that fills every field fills this one too. */}
+      <div aria-hidden="true" style={{ position: "absolute", left: "-10000px", width: 1, height: 1, overflow: "hidden" }}>
+        <label>
+          Leave this empty
+          <input type="text" name="trap" tabIndex={-1} autoComplete="off" defaultValue="" />
+        </label>
+      </div>
       <div className="sticky top-0 z-10 -mx-5 md:-mx-7 px-5 md:px-7 py-3 bg-[color-mix(in_oklch,var(--rt-surface)_92%,transparent)] backdrop-blur border-b border-rt-border">
         <div className="flex items-center gap-3 text-[12px] text-rt-muted">
           <span className="tabular">
