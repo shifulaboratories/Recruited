@@ -2,6 +2,7 @@ import type { InterviewStatus, OfferStatus, Prisma, Recommendation } from "@pris
 import { db } from "@/lib/db";
 import { notFound, UserError } from "@/lib/data/errors";
 import { requireApplication } from "@/lib/data/applications";
+import { secret } from "@/lib/ids";
 import {
   INTERVIEW_FORMATS,
   OFFER_STATUSES,
@@ -88,6 +89,33 @@ export async function updateInterview(userId: string, interviewId: string, input
   const i = await requireInterview(userId, interviewId);
   if (input.title !== undefined && !input.title.trim()) throw new UserError("An interview needs a title.");
   return db.interview.update({ where: { id: i.id }, data: interviewData(input) });
+}
+
+export function bookingPath(token: string) {
+  return `/book/${encodeURIComponent(token)}`;
+}
+
+/**
+ * Offer the applicant times to pick from instead of fixing one: they open a
+ * booking link (/book/<token>), see the times in their own time zone, and the
+ * one they pick becomes scheduledAt. Offering again replaces the times and
+ * clears any time already picked. Pass an empty list to withdraw the offer.
+ */
+export async function offerTimes(userId: string, interviewId: string, times: string[]) {
+  const i = await requireInterview(userId, interviewId);
+  if (!times.length) {
+    return db.interview.update({ where: { id: i.id }, data: { slots: [], bookToken: null } });
+  }
+  if (times.length > 12) throw new UserError("Offer at most twelve times.");
+  const now = Date.now();
+  const slots = Array.from(new Set(times.map((t) => when(t, "offer_times")!.getTime())))
+    .sort((a, b) => a - b)
+    .map((t) => new Date(t));
+  if (slots.some((d) => d.getTime() < now)) throw new UserError("One of those times has already passed.");
+  return db.interview.update({
+    where: { id: i.id },
+    data: { slots, bookToken: i.bookToken ?? secret("bk"), scheduledAt: null, status: "SCHEDULED" },
+  });
 }
 
 export async function deleteInterview(userId: string, interviewId: string) {
@@ -228,8 +256,10 @@ export async function interviewsAndOffers(userId: string, applicationId: string)
   ]);
   const cards = interviews.flatMap((i) => i.scorecards);
   return {
-    interviews: interviews.map(({ scorecards, userId: _u, applicationId: _a, ...i }) => ({
+    interviews: interviews.map(({ scorecards, userId: _u, applicationId: _a, bookToken, ...i }) => ({
       ...i,
+      /** The applicant's link to pick one of `slots`, while times are on offer. */
+      bookingPath: bookToken && i.slots.length && !i.scheduledAt ? bookingPath(bookToken) : null,
       scorecards: scorecards.map((c) => ({
         id: c.id,
         interviewer: c.interviewer,

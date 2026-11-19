@@ -19,7 +19,11 @@ You tell Claude what you're hiring for. It writes the job, an application form, 
 - **Messages to applicants.** Claude drafts the screening invite, interview invite or rejection from `prep_message`, which hands it the applicant's own screening link and what they've been sent before. Recruited never sends email: you send from your own, with your mail connector or the app's Open in email, and the message is marked sent so the applicant's page shows what they were told and when.
 - **Importing from boards.** Paste or upload an Indeed, LinkedIn or spreadsheet export of applicants and everyone lands in the job at once, counted against the listing they came through. `import_applicants` previews first and never adds anyone twice.
 - **Interviews and offers.** Rounds with times, formats and who they'll meet; a scorecard per interviewer with a yes or no and evidence; offers kept as versions, so a counter-offer never overwrites what was offered before. Nothing here moves an applicant or decides for you.
-- **29 MCP tools and 3 prompts** (`post_a_role`, `review_applicants`, `message_applicants`). The app has the screens a person needs to look and adjust: jobs, applicants, one applicant's answers, and Connect Claude.
+- **Work samples and short videos.** A screening form can hold a task (a brief, a time estimate, a written answer recorded like any other) and a video answer recorded in the browser, up to five minutes.
+- **Around the call.** `save_probes` keeps the follow-up questions to ask, aimed at the answers worth a second look; `request_reference` sends a referee four fixed questions on a link; `schedule_interview` can offer times that the applicant picks on a booking page in their own time zone, with no calendar connected.
+- **Every day and at the end.** `daily_brief` says what needs you today, and the jobs screen shows the same list. `close_out_job` drafts a kind note to everyone still waiting when a role is filled. `share_applicant` makes a read-only link for someone without an account.
+- **A sample workspace** to look around before posting a real role, removed in one step without touching real data.
+- **37 MCP tools and 5 prompts** (`morning_brief`, `prepare_for_call`, `post_a_role`, `review_applicants`, `message_applicants`). The app has the screens a person needs to look and adjust: jobs, applicants, one applicant's answers, and Connect Claude.
 
 ## Connect your AI
 

@@ -27,6 +27,7 @@ export type JobInput = {
   salaryPeriod?: string;
   description?: string;
   rubric?: string;
+  afterApply?: string;
   status?: JobStatus;
 };
 
@@ -40,6 +41,7 @@ function check(input: JobInput) {
   if (input.salaryMin != null && input.salaryMax != null && input.salaryMin > input.salaryMax)
     throw new UserError("salaryMin is larger than salaryMax.");
   if (input.title !== undefined && !input.title.trim()) throw new UserError("A job needs a title.");
+  if (input.afterApply && input.afterApply.split("\n").filter((l) => l.trim()).length > 6) throw new UserError("Keep what happens next to six steps or fewer, one per line.");
 }
 
 export async function createJob(userId: string, input: JobInput & { title: string }) {
@@ -58,6 +60,7 @@ export async function createJob(userId: string, input: JobInput & { title: strin
       salaryPeriod: input.salaryPeriod ?? "year",
       description: input.description ?? "",
       rubric: input.rubric ?? "",
+      afterApply: input.afterApply ?? "",
       status: input.status ?? "DRAFT",
     },
   });

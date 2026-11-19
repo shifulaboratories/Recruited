@@ -24,7 +24,7 @@ export const KIND_GUIDANCE: Record<MessageKindName, string[]> = {
   ],
   INTERVIEW_INVITE: [
     "Name the role, the format (video, phone, in person), the length and who they'll meet.",
-    "Use the scheduled interview from prep_message for the time, format, length, link and who they'll meet. Offer times or a booking link only if the person gave them; never invent a time.",
+    "Use the scheduled interview from prep_message for the time, format, length, link and who they'll meet. Where it has a bookingLink instead of a time, give them that link to pick a time themselves. Never invent a time.",
     "Give the time with its time zone, and the applicant's own if you know it.",
     "Say what, if anything, to prepare.",
   ],

@@ -15,54 +15,115 @@ const ORIGIN_LABEL: Record<string, string> = {
 };
 
 export function OriginBadge({ origin }: { origin: string }) {
-  const tone =
-    origin === "TYPED"
-      ? "text-rt-typed border-rt-border"
-      : origin === "UNKNOWN"
-        ? "text-rt-faint border-rt-border"
-        : "text-rt-pasted border-rt-pasted/40 hl-pasted";
-  return <span className={`inline-block rounded border px-1.5 py-0.5 text-xs font-medium ${tone}`}>{ORIGIN_LABEL[origin] ?? origin}</span>;
+  const tone = origin === "TYPED" ? "var(--rt-typed)" : origin === "UNKNOWN" ? "var(--rt-faint)" : "var(--rt-pasted)";
+  return (
+    <span className="chip" style={{ ["--tone" as string]: tone }}>
+      <span className="dot" />
+      {ORIGIN_LABEL[origin] ?? origin}
+    </span>
+  );
 }
 
 export function StyleBadge({ score, label }: { score: number; label: string }) {
   if (score < 0.2) return null;
   return (
-    <span className={`inline-block rounded border border-rt-ai/40 px-1.5 py-0.5 text-xs font-medium text-rt-ai ${score >= 0.5 ? "hl-ai" : ""}`}>
+    <span className="chip" style={{ ["--tone" as string]: "var(--rt-ai)" }}>
+      <span className="dot" />
       {label}
     </span>
   );
 }
 
-export function ProvenanceBar({ r }: { r: ProvenanceRollup }) {
+/** One answer's arrival as a bar: typed share in ink, pasted share in amber. */
+export function ArrivalBar({ pastedShare, ai = false }: { pastedShare: number; ai?: boolean }) {
+  const pasted = Math.round(Math.min(1, Math.max(0, pastedShare)) * 100);
+  return (
+    <div className="flex h-1 rounded-full overflow-hidden bg-rt-subtle">
+      <div className="draw" style={{ width: `${100 - pasted}%`, background: ai ? "var(--rt-ai)" : "color-mix(in oklch, var(--rt-typed) 55%, transparent)" }} />
+      <div className="draw" style={{ width: `${pasted}%`, background: "var(--rt-pasted)", ["--i" as string]: 1 }} />
+    </div>
+  );
+}
+
+export function ProvenanceBar({ r, compact = false }: { r: ProvenanceRollup; compact?: boolean }) {
   if (!r.written) return <span className="text-rt-faint text-xs">No written answers</span>;
   const typed = r.typed;
   const pasted = r.pasted + r.mixed + r.injected;
   const pct = (x: number) => Math.round((x / r.written) * 100);
   return (
-    <div className="min-w-[140px]">
-      <div className="flex h-1.5 rounded overflow-hidden bg-rt-subtle">
-        <div style={{ width: `${pct(typed)}%`, background: "var(--rt-typed)" }} />
-        <div style={{ width: `${pct(pasted)}%`, background: "var(--rt-pasted)" }} />
+    <div className={compact ? "w-full" : "min-w-[150px]"}>
+      <div className="flex h-1.5 gap-px rounded-full overflow-hidden bg-rt-subtle">
+        <div className="draw" style={{ width: `${pct(typed)}%`, background: "color-mix(in oklch, var(--rt-typed) 55%, transparent)" }} />
+        <div className="draw" style={{ width: `${pct(pasted)}%`, background: "var(--rt-pasted)", ["--i" as string]: 1 }} />
       </div>
-      <div className="text-xs text-rt-muted mt-1 tabular">
-        {pct(typed)}% typed · {pct(pasted)}% pasted or filled in
+      <div className="text-[11.5px] text-rt-muted mt-1 tabular">
+        {compact ? (
+          <>
+            {pct(typed)}% typed
+            {pasted > 0 && <span className="text-rt-pasted"> · {pct(pasted)}% pasted</span>}
+          </>
+        ) : (
+          <>
+            {pct(typed)}% typed · {pct(pasted)}% pasted or filled in
+          </>
+        )}
         {r.likelyAi > 0 && <span className="text-rt-ai"> · {r.likelyAi} likely AI</span>}
       </div>
     </div>
   );
 }
 
+export const STAGE_LABEL: Record<string, string> = {
+  NEW: "New",
+  SCREEN: "Screening",
+  INTERVIEW: "Interview",
+  OFFER: "Offer",
+  HIRED: "Hired",
+  REJECTED: "Not this time",
+  DRAFT: "Draft",
+  LIVE: "Live",
+  PAUSED: "Paused",
+  CLOSED: "Closed",
+  OPEN: "Open",
+};
+
+/** Stage hue turns as an applicant advances, so "further along" reads without the label. */
+export const STAGE_TONE: Record<string, string> = {
+  NEW: "var(--rt-faint)",
+  SCREEN: "oklch(0.55 0.13 235)",
+  INTERVIEW: "oklch(0.53 0.16 285)",
+  OFFER: "oklch(0.6 0.14 62)",
+  HIRED: "var(--rt-success)",
+  REJECTED: "var(--rt-faint)",
+  LIVE: "var(--rt-success)",
+  OPEN: "var(--rt-success)",
+  DRAFT: "var(--rt-faint)",
+  PAUSED: "var(--rt-warning)",
+  CLOSED: "var(--rt-faint)",
+};
+
 export function StageChip({ stage }: { stage: string }) {
-  return <span className="font-mono text-[11px] uppercase tracking-wide text-rt-muted">{stage.toLowerCase()}</span>;
+  return (
+    <span className="chip" style={{ ["--tone" as string]: STAGE_TONE[stage] ?? "var(--rt-muted)" }}>
+      <span className="dot" />
+      {STAGE_LABEL[stage] ?? stage.toLowerCase()}
+    </span>
+  );
 }
 
 export function QualifiedChip({ qualified }: { qualified: boolean | null }) {
   if (qualified === null) return null;
   return qualified ? (
-    <span className="text-xs text-rt-success">Meets must-haves</span>
+    <span className="chip" style={{ ["--tone" as string]: "var(--rt-success)" }}>
+      Meets must-haves
+    </span>
   ) : (
-    <span className="text-xs text-rt-muted">Misses a must-have</span>
+    <span className="chip">Misses a must-have</span>
   );
+}
+
+export function tierTone(tier: string | null | undefined) {
+  return tier === "A" ? "var(--rt-tier-a)" : tier === "B" ? "var(--rt-tier-b)" : tier === "C" ? "var(--rt-tier-c)" : undefined;
 }
 
 /**
@@ -70,22 +131,22 @@ export function QualifiedChip({ qualified }: { qualified: boolean | null }) {
  * accent blue, C grey (brand/BRAND.md). A proposal the person hasn't decided
  * on is drawn dashed and says so.
  */
-export function TierChip({ tier, proposal = false, rank }: { tier: string | null; proposal?: boolean; rank?: number | null }) {
-  if (!tier) return <span className="text-xs text-rt-faint">Unranked</span>;
-  const color = tier === "A" ? "var(--rt-tier-a)" : tier === "B" ? "var(--rt-tier-b)" : "var(--rt-tier-c)";
+export function TierChip({ tier, proposal = false, rank, bare = false }: { tier: string | null; proposal?: boolean; rank?: number | null; bare?: boolean }) {
+  if (!tier) return bare ? <span className="inline-grid place-items-center w-6 h-6 rounded-md text-xs text-rt-faint inset">–</span> : <span className="text-xs text-rt-faint">Unranked</span>;
+  const color = tierTone(tier)!;
   return (
     <span className="inline-flex items-center gap-1.5 text-xs" title={proposal ? "Proposed by Claude, not decided yet" : "Decided"}>
       <span
-        className="inline-grid place-items-center w-5 h-5 rounded font-mono font-medium"
+        className="inline-grid place-items-center w-6 h-6 rounded-md font-semibold text-[12px]"
         style={
           proposal
-            ? { border: `1px dashed ${color}`, color }
-            : { background: `color-mix(in oklch, ${color} 18%, transparent)`, color, border: `1px solid ${color}` }
+            ? { boxShadow: `inset 0 0 0 1px ${color}`, color, backgroundImage: `repeating-linear-gradient(135deg, color-mix(in oklch, ${color} 12%, transparent) 0 3px, transparent 3px 6px)` }
+            : { background: color, color: "var(--rt-surface)" }
         }
       >
         {tier}
       </span>
-      {proposal && <span className="text-rt-faint">proposed{rank ? ` · #${rank}` : ""}</span>}
+      {!bare && proposal && <span className="text-rt-faint">proposed{rank ? ` · #${rank}` : ""}</span>}
     </span>
   );
 }

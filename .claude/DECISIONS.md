@@ -136,3 +136,44 @@ glyph. Copied rather than shared because the two sites deploy separately and
 Recruited has no dependency on Hired. Recruited-only rules sit at the bottom of
 styles.css. No pricing and no waitlist on the page: there is no hosted plan and
 no signup backend, so both CTAs go to the deploy guide and the repository.
+
+## 2026-11-17: The app wears the landing page's look
+
+William found the product "mid" and chose a visual rebuild over new features.
+The app now uses the landing page's language: a grey canvas with white cards
+lit by a rim-plus-shadow (`--rt-shadow-card`), segmented controls for stage,
+tier and statuses, toned chips, and one-shot arrival animations (`.rise`,
+`.draw`) that stop for reduced motion. New pieces: `src/components/ui.tsx`
+(icons, headers, stats, empty states, avatars), `nav.tsx`, and `board.tsx`,
+a drag-and-drop pipeline that calls the same `moveStage` action as the
+applicant page. No data or tool changed. A true "replay" of how an answer was
+written was considered and left out: the form promises counts and timings,
+never keystrokes, and a replay would need the keystrokes.
+
+## 2026-11-18: Twelve features, no new screens
+
+William asked for all twelve ideas from the "make it better" list. They went
+into the screens that exist, to keep the three-screen rule: the applicant page
+gained Ask on the call, Share, References and booking state; the job page a
+Close the loop card and a Leading badge; the jobs page a Today list; settings
+the company profile and the sample workspace. Calls worth remembering:
+
+- Work samples are a question type (`task`), not a new model or tool: they
+  ride on screening forms and screening links, and their answers get
+  provenance like any written answer.
+- Video answers are stored in Postgres like files (40 MB each, 60 MB a
+  submission) to keep DATABASE_URL the only setting. Browsers write WebM
+  without a duration, so `RecordedVideo` nudges the player once to find it,
+  and `/files/[id]` answers byte ranges (Safari won't play without them).
+- Reference questions are fixed (four), so referees can be compared, and
+  answers are plain text: provenance is for applicants' own answers only.
+- Booking stores offered times on the Interview (`slots`, `bookToken`); the
+  pick clears the slots in the same conditional write, so two picks can't both
+  land. Times render after mount, in the viewer's zone.
+- `close_out_job` never touches OFFER or HIRED and skips anyone with a
+  REJECTION message, drafted or sent; the tool says to dry-run first.
+- The shared applicant link is the one public page that shows answers, so it
+  is off by default, cleared rather than hidden when turned off, and leaves out
+  contact details, notes, messages and files.
+- The sample workspace marks the Job and Candidates `sample`; wiping deletes
+  only those and lets cascades take the rest.

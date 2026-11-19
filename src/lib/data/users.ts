@@ -40,10 +40,22 @@ export async function ensureOwner(): Promise<{ email: string; password: string }
   return { email, password };
 }
 
-export async function updateAccount(userId: string, input: { name?: string; email?: string; companyName?: string; password?: string }) {
+export async function updateAccount(
+  userId: string,
+  input: { name?: string; email?: string; companyName?: string; companyAbout?: string; companyWebsite?: string; password?: string },
+) {
   const data: Record<string, string> = {};
   if (input.name !== undefined) data.name = input.name.trim();
   if (input.companyName !== undefined) data.companyName = input.companyName.trim();
+  if (input.companyAbout !== undefined) {
+    if (input.companyAbout.length > 2000) throw new UserError("Keep the company description under 2000 characters.");
+    data.companyAbout = input.companyAbout.trim();
+  }
+  if (input.companyWebsite !== undefined) {
+    const w = input.companyWebsite.trim();
+    if (w && !/^https?:\/\/[^\s.]+\.[^\s]+$/i.test(w)) throw new UserError("The website should be a full address, starting with https://.");
+    data.companyWebsite = w;
+  }
   if (input.email !== undefined) {
     const email = input.email.trim().toLowerCase();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new UserError("That email address doesn't look right.");

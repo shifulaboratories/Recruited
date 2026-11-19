@@ -2,13 +2,22 @@ import Link from "next/link";
 import { baseUrl, requireUser } from "@/lib/auth";
 import { formatPay, getJob } from "@/lib/data/jobs";
 import { applyPath, listingReport } from "@/lib/data/listings";
-import { listApplications } from "@/lib/data/applications";
+import { listApplications, STAGES } from "@/lib/data/applications";
 import { boardByKey, renderListing, toHtml } from "@/lib/boards";
 import { readQuestions } from "@/lib/forms";
-import { setJobStatus, setListingStatus } from "@/server/actions";
-import { CopyButton } from "@/components/forms";
+import { closeOutAction, setJobStatus, setListingStatus } from "@/server/actions";
+import { closeOutJob, DEFAULT_CLOSEOUT } from "@/lib/data/closeout";
+import { ActionForm, CopyButton } from "@/components/forms";
 import { ImportApplicants } from "@/components/import-applicants";
-import { ProvenanceBar, QualifiedChip, StageChip, TierChip } from "@/components/provenance";
+import { Board } from "@/components/board";
+import { Empty, Icon, PageHeader, SectionHead } from "@/components/ui";
+import { StageChip } from "@/components/provenance";
+
+function sourceLabel(source: string) {
+  const [key, variant] = source.split(" ");
+  const b = boardByKey(key);
+  return b ? `${b.name}${variant ? ` · ${variant}` : ""}` : source;
+}
 
 export default async function JobPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -16,114 +25,62 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
   const job = await getJob(user.id, id);
   const base = await baseUrl();
   const report = await listingReport(user.id, job.id);
-  const { applications } = await listApplications(user.id, { jobId: job.id, sort: "tier" });
+  const { applications } = await listApplications(user.id, { jobId: job.id, sort: "tier", limit: 500 });
   const byId = new Map(report.listings.map((r) => [r.listingId, r]));
+  const filled = job.status === "CLOSED" || applications.some((a) => a.stage === "HIRED");
+  const loop = filled ? await closeOutJob(user.id, job.id, { dryRun: true }) : null;
+  const pending = loop?.wouldDraft ?? 0;
 
   return (
-    <div className="space-y-8">
-      <header className="flex flex-wrap items-start gap-4">
-        <div className="flex-1">
-          <p className="eyebrow">Job · {job.status.toLowerCase()}</p>
-          <h1 className="text-2xl font-semibold tracking-tight">{job.title}</h1>
-          <p className="text-rt-muted">{[job.team, job.location, job.workplace, formatPay(job)].filter(Boolean).join(" · ")}</p>
-        </div>
-        <div className="flex gap-2">
-          {job.status !== "OPEN" && (
-            <form action={setJobStatus.bind(null, job.id, "OPEN")}>
-              <button className="btn btn-primary">Open for applications</button>
-            </form>
-          )}
-          {job.status === "OPEN" && (
-            <form action={setJobStatus.bind(null, job.id, "CLOSED")}>
-              <button className="btn">Close</button>
-            </form>
-          )}
-        </div>
-      </header>
+    <div className="space-y-10">
+      <div className="space-y-3">
+        <Link href="/jobs" className="rise inline-flex items-center gap-1 text-[12.5px] text-rt-muted hover:text-rt-foreground">
+          <Icon name="chevron" size={13} className="rotate-180" />
+          Jobs
+        </Link>
+        <PageHeader
+          eyebrow={<StageChip stage={job.status} />}
+          title={job.title}
+          sub={[job.team, job.location, job.workplace, formatPay(job)].filter(Boolean).join(" · ") || undefined}
+          actions={
+            job.status !== "OPEN" ? (
+              <form action={setJobStatus.bind(null, job.id, "OPEN")}>
+                <button className="btn btn-primary">Open for applications</button>
+              </form>
+            ) : (
+              <form action={setJobStatus.bind(null, job.id, "CLOSED")}>
+                <button className="btn">Close the role</button>
+              </form>
+            )
+          }
+        />
+      </div>
 
-      <section className="space-y-3">
-        <h2 className="font-semibold">Listings</h2>
-        {job.listings.length === 0 ? (
-          <p className="text-rt-muted">
-            No listings yet. Ask Claude to <span className="font-mono text-xs">create_listing</span> for the boards you use; each one gets its own apply link.
-          </p>
-        ) : (
-          <ul className="space-y-3">
-            {job.listings.map((l) => {
-              const url = `${base}${applyPath(l.slug)}`;
-              const r = byId.get(l.id);
-              const paste = renderListing(l.board, l.title, l.body, url);
-              return (
-                <li key={l.id} className="card p-4 space-y-3">
-                  <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-                    <span className="font-mono text-xs rounded bg-rt-primary-tint text-rt-primary px-1.5 py-0.5">
-                      {boardByKey(l.board)?.name ?? l.board} · {l.variant}
-                    </span>
-                    <span className="font-medium flex-1 min-w-[160px]">{l.title}</span>
-                    <span className="text-xs text-rt-muted tabular">
-                      {r?.applicants ?? 0} applied · {r?.qualified ?? 0} qualified ·{" "}
-                      <span style={{ color: "var(--rt-tier-a)" }}>{r?.tiers.A ?? 0} A-tier</span> · {r?.reachedInterview ?? 0} interviewed
-                      {r?.costPerATier != null && ` · ${report.currency} ${r.costPerATier} per A-tier`}
-                    </span>
-                    <StageChip stage={l.status} />
-                  </div>
-                  <div className="flex flex-wrap gap-2 items-center">
-                    <code className="text-xs text-rt-muted truncate max-w-full">{url}</code>
-                    <CopyButton text={url} label="Copy apply link" />
-                    <CopyButton text={paste.title} label="Copy title" />
-                    <CopyButton text={paste.body} label={`Copy ${paste.format === "html" ? "HTML" : "text"} to paste`} />
-                    {l.status !== "LIVE" && (
-                      <form action={setListingStatus.bind(null, l.id, "LIVE")}>
-                        <button className="btn text-xs">Mark live</button>
-                      </form>
-                    )}
-                    {l.status === "LIVE" && (
-                      <form action={setListingStatus.bind(null, l.id, "PAUSED")}>
-                        <button className="btn text-xs">Pause</button>
-                      </form>
-                    )}
-                  </div>
-                  {paste.warnings.length > 0 && (
-                    <ul className="text-xs text-rt-pasted list-disc pl-4">
-                      {paste.warnings.map((w) => (
-                        <li key={w}>{w}</li>
-                      ))}
-                    </ul>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </section>
-
-      <section className="space-y-3">
-        <h2 className="font-semibold">Applicants</h2>
+      <section>
+        <SectionHead title="Pipeline" count={applications.length}>
+          <span className="text-[12px] text-rt-faint hidden sm:inline">Drag a card to move it. Tier order, A first.</span>
+        </SectionHead>
         {applications.length === 0 ? (
-          <p className="text-rt-muted">Nobody yet. People who use an apply link land here on their own.</p>
+          <Empty icon="board" title="Nobody yet" ask={job.listings.length ? "Import last week's applicants from this Indeed export." : `Post the ${job.title} role on LinkedIn.`} />
         ) : (
-          <ul className="card divide-y divide-rt-border">
-            {applications.map((a) => (
-              <li key={a.id}>
-                <Link href={`/applications/${a.id}`} className="flex flex-wrap items-center gap-x-6 gap-y-2 p-4 hover:bg-rt-subtle">
-                  <div className="w-28 shrink-0">
-                    <TierChip tier={a.effectiveTier} proposal={a.tierIsProposal} rank={a.proposal?.rank} />
-                  </div>
-                  <div className="flex-1 min-w-[180px]">
-                    <div className="font-medium">{a.candidate}</div>
-                    <div className="text-xs text-rt-muted">{a.source}</div>
-                  </div>
-                  <QualifiedChip qualified={a.qualified} />
-                  <ProvenanceBar r={a.provenance} />
-                  <StageChip stage={a.stage} />
-                </Link>
-              </li>
-            ))}
-          </ul>
+          <Board
+            stages={STAGES}
+            cards={applications.map((a) => ({
+              id: a.id,
+              candidate: a.candidate,
+              source: sourceLabel(a.source),
+              stage: a.stage,
+              tier: a.effectiveTier,
+              proposal: a.tierIsProposal,
+              rank: a.proposal?.rank ?? null,
+              qualified: a.qualified,
+              provenance: a.provenance,
+            }))}
+          />
         )}
-        <details className="text-sm">
-          <summary className="cursor-pointer text-rt-muted hover:text-rt-foreground">Import applicants from a board export (CSV)</summary>
-          <div className="pt-3">
+        <details className="mt-3 text-sm group">
+          <summary className="btn btn-quiet text-xs cursor-pointer">Import applicants from a board export (CSV)</summary>
+          <div className="card p-4 mt-2">
             <ImportApplicants
               jobId={job.id}
               listings={job.listings.map((l) => ({ id: l.id, label: `${boardByKey(l.board)?.name ?? l.board} ${l.variant}: ${l.title}` }))}
@@ -132,46 +89,182 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
         </details>
       </section>
 
-      <section className="space-y-3">
-        <h2 className="font-semibold">Forms</h2>
-        {job.forms.length === 0 ? (
-          <p className="text-rt-muted">No application form yet, so the apply page asks only for a name and email.</p>
+      {loop && pending > 0 && (
+        <section className="card rise p-5 sm:p-6 space-y-4" style={{ boxShadow: "var(--rt-shadow-card), inset 3px 0 0 var(--rt-primary)" }}>
+          <div className="space-y-1">
+            <h2 className="h-section">Close the loop</h2>
+            <p className="text-[13px] text-rt-muted">
+              {pending} {pending === 1 ? "person hasn't" : "people haven't"} heard back:{" "}
+              {loop.applicants
+                .slice(0, 6)
+                .map((x) => x.name)
+                .join(", ")}
+              {pending > 6 ? ` and ${pending - 6} more` : ""}. This saves a short, kind note for each as a draft on their page; nothing is sent until you send it.
+            </p>
+          </div>
+          <details className="text-sm">
+            <summary className="btn btn-primary text-xs cursor-pointer">Write the notes</summary>
+            <ActionForm action={closeOutAction} submit={`Save ${pending} draft${pending === 1 ? "" : "s"}`} className="pt-3">
+              <input type="hidden" name="jobId" value={job.id} />
+              <input className="field" name="subject" defaultValue={DEFAULT_CLOSEOUT.subject} />
+              <textarea className="field min-h-48" name="body" defaultValue={DEFAULT_CLOSEOUT.body} />
+              <p className="text-[11.5px] text-rt-faint">
+                {"{first_name}"}, {"{job}"}, {"{at_company}"} and {"{from}"} are filled in for each person.
+              </p>
+              <label className="flex items-center gap-2 text-[13px] text-rt-muted">
+                <input type="checkbox" name="moveToRejected" defaultChecked /> Move them to Not this time
+              </label>
+              {job.status !== "CLOSED" && (
+                <label className="flex items-center gap-2 text-[13px] text-rt-muted">
+                  <input type="checkbox" name="closeJob" /> Close the role and its listings
+                </label>
+              )}
+            </ActionForm>
+          </details>
+        </section>
+      )}
+
+      <section>
+        <SectionHead title="Listings" count={job.listings.length} />
+        {job.listings.length === 0 ? (
+          <Empty icon="link" title="No listings yet" ask={`Write a listing for ${job.title} on OnlineJobs.ph and one on LinkedIn.`} />
         ) : (
-          <div className="grid md:grid-cols-2 gap-3">
-            {job.forms.map((f) => (
-              <div key={f.id} className="card p-4">
-                <p className="eyebrow">{f.kind.toLowerCase()}</p>
-                <div className="font-medium mb-2">{f.name}</div>
-                <ol className="list-decimal pl-5 text-rt-muted space-y-1">
-                  {readQuestions(f.questions).map((q) => (
-                    <li key={q.id}>
-                      {q.label}
-                      {q.knockout && <span className="text-xs text-rt-faint"> · must-have</span>}
-                    </li>
-                  ))}
-                </ol>
-              </div>
-            ))}
+          <div className="grid lg:grid-cols-2 gap-3">
+            {job.listings.map((l, i) => {
+              const url = `${base}${applyPath(l.slug)}`;
+              const r = byId.get(l.id);
+              const paste = renderListing(l.board, l.title, l.body, url);
+              const stats: [string, number | string, string?][] = [
+                ["Applied", r?.applicants ?? 0],
+                ["Met must-haves", r?.qualified ?? 0],
+                ["A tier", r?.tiers.A ?? 0, "var(--rt-tier-a)"],
+                ["Interviewed", r?.reachedInterview ?? 0],
+              ];
+              return (
+                <article key={l.id} className="card rise p-5 space-y-4 min-w-0" style={{ ["--i" as string]: i }}>
+                  <div className="flex items-start gap-3">
+                    <div className="min-w-0 flex-1">
+                      <p className="eyebrow">
+                        {boardByKey(l.board)?.name ?? l.board} · listing {l.variant}
+                      </p>
+                      <p className="font-medium truncate mt-0.5">{l.title}</p>
+                    </div>
+                    {report.best?.listingId === l.id && (
+                      <span
+                        className="chip"
+                        style={{ ["--tone" as string]: "var(--rt-tier-a)" }}
+                        title={`Leads on ${report.best.by}.${report.best.note ? ` ${report.best.note}` : ""}`}
+                      >
+                        <span className="dot" />
+                        {report.best.confident ? "Best so far" : "Leading"}
+                      </span>
+                    )}
+                    <StageChip stage={l.status} />
+                  </div>
+                  <dl className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    {stats.map(([k, v, tone]) => (
+                      <div key={k} className="inset px-2.5 py-2">
+                        <dd className="text-[18px] font-semibold tabular leading-tight" style={tone ? { color: tone } : undefined}>
+                          {v}
+                        </dd>
+                        <dt className="text-[10.5px] text-rt-faint leading-tight mt-0.5">{k}</dt>
+                      </div>
+                    ))}
+                  </dl>
+                  {r?.costPerATier != null && (
+                    <p className="text-[12px] text-rt-muted">
+                      {report.currency} {r.costPerATier.toLocaleString("en-US")} per A-tier applicant
+                    </p>
+                  )}
+                  <div className="flex items-center gap-2 inset px-2.5 py-1.5">
+                    <Icon name="link" size={13} className="text-rt-faint" />
+                    <code className="text-[11.5px] text-rt-muted truncate flex-1 min-w-0">{url}</code>
+                    <CopyButton text={url} label="Copy" />
+                  </div>
+                  <div className="flex flex-wrap gap-2 items-center">
+                    <CopyButton text={paste.title} label="Copy title" />
+                    <CopyButton text={paste.body} label={`Copy ${paste.format === "html" ? "HTML" : "text"} to paste`} />
+                    <div className="flex-1" />
+                    {l.status !== "LIVE" ? (
+                      <form action={setListingStatus.bind(null, l.id, "LIVE")}>
+                        <button className="btn text-xs">Mark live</button>
+                      </form>
+                    ) : (
+                      <form action={setListingStatus.bind(null, l.id, "PAUSED")}>
+                        <button className="btn btn-quiet text-xs">Pause</button>
+                      </form>
+                    )}
+                  </div>
+                  {paste.warnings.length > 0 && (
+                    <ul className="text-[12px] text-rt-pasted space-y-1">
+                      {paste.warnings.map((w) => (
+                        <li key={w} className="flex gap-1.5">
+                          <span className="dot mt-1.5" style={{ ["--tone" as string]: "var(--rt-pasted)" }} />
+                          {w}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </article>
+              );
+            })}
           </div>
         )}
       </section>
 
-      {job.rubric && (
-        <section className="space-y-2">
-          <h2 className="font-semibold">What makes an A</h2>
-          <p className="card p-4 text-rt-muted whitespace-pre-wrap">{job.rubric}</p>
+      <div className="grid lg:grid-cols-2 gap-6 items-start">
+        <section>
+          <SectionHead title="Forms" count={job.forms.length} />
+          {job.forms.length === 0 ? (
+            <p className="card p-4 text-rt-muted">No application form yet, so the apply page asks only for a name and email.</p>
+          ) : (
+            <div className="space-y-3">
+              {job.forms.map((f) => (
+                <div key={f.id} className="card p-5">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Icon name="form" size={15} className="text-rt-faint" />
+                    <span className="font-medium flex-1">{f.name}</span>
+                    <span className="chip chip-mono">{f.kind.toLowerCase()}</span>
+                  </div>
+                  <ol className="space-y-2">
+                    {readQuestions(f.questions).map((q, qi) => (
+                      <li key={q.id} className="flex gap-3 text-[13px]">
+                        <span className="font-mono text-[11px] text-rt-faint pt-0.5 w-4 text-right tabular">{qi + 1}</span>
+                        <span className="flex-1 text-rt-muted">{q.label}</span>
+                        {q.knockout && (
+                          <span className="chip shrink-0" style={{ ["--tone" as string]: "var(--rt-primary)" }}>
+                            must-have
+                          </span>
+                        )}
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+              ))}
+            </div>
+          )}
         </section>
-      )}
 
-      {job.description && (
-        <section className="space-y-2">
-          <h2 className="font-semibold">Description</h2>
-          <article
-            className="card p-4 space-y-3 text-rt-muted [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_a]:text-rt-primary"
-            dangerouslySetInnerHTML={{ __html: toHtml(job.description) }}
-          />
+        <section className="space-y-6">
+          {job.rubric && (
+            <div>
+              <SectionHead title="What makes an A" />
+              <p className="card p-5 text-rt-muted whitespace-pre-wrap" style={{ boxShadow: "var(--rt-shadow-card), inset 3px 0 0 var(--rt-tier-a)" }}>
+                {job.rubric}
+              </p>
+            </div>
+          )}
+          {job.description && (
+            <div>
+              <SectionHead title="Description" />
+              <article
+                className="card p-5 space-y-3 text-rt-muted [&_h2]:text-rt-foreground [&_h2]:font-semibold [&_h3]:text-rt-foreground [&_h3]:font-medium [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_a]:text-rt-primary"
+                dangerouslySetInnerHTML={{ __html: toHtml(job.description) }}
+              />
+            </div>
+          )}
         </section>
-      )}
+      </div>
     </div>
   );
 }

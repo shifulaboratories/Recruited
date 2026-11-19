@@ -10,7 +10,7 @@ import { MAX_TOTAL_BYTES } from "@/lib/files";
  */
 export async function handlePublicSubmit(request: Request, run: (p: PublicPayload) => Promise<unknown>) {
   const length = Number(request.headers.get("content-length") ?? 0);
-  if (length > MAX_TOTAL_BYTES + 1_000_000) return Response.json({ error: "Together the files are over 25 MB. Attach smaller ones." }, { status: 413 });
+  if (length > MAX_TOTAL_BYTES + 1_000_000) return Response.json({ error: "Together the files are over 60 MB. Attach smaller ones." }, { status: 413 });
   let text: string;
   const files: NonNullable<PublicPayload["files"]> = {};
   if ((request.headers.get("content-type") ?? "").startsWith("multipart/form-data")) {

@@ -7,6 +7,13 @@ import * as uploads from "@/lib/data/uploads";
 import * as messages from "@/lib/data/messages";
 import * as imports from "@/lib/data/imports";
 import * as interviews from "@/lib/data/interviews";
+import * as probes from "@/lib/data/probes";
+import * as references from "@/lib/data/references";
+import * as share from "@/lib/data/share";
+import * as brief from "@/lib/data/brief";
+import * as closeout from "@/lib/data/closeout";
+import * as sample from "@/lib/data/sample";
+import * as users from "@/lib/data/users";
 import { UserError } from "@/lib/data/errors";
 import { BOARDS, BOARD_KEYS, boardByKey } from "@/lib/boards";
 import { QUESTION_TYPES } from "@/lib/forms";
@@ -89,7 +96,9 @@ const QUESTION_SCHEMA = {
     "knockout marks a must-have: { accept: [answers that pass] } for yes_no and single_choice, { min, max } for number. " +
     "Missing a knockout marks the applicant as not meeting the must-haves; it never rejects them automatically. " +
     "short_text and long_text answers are recorded for provenance (typed, pasted, likely AI), so ask open questions in those types. " +
-    "file takes one attachment up to 10 MB; accept is image, pdf or image_or_pdf (default). Use it for a work-setup photo, a speed-test or typing-test screenshot, a portfolio PDF; say in help exactly what the picture should show.",
+    "file takes one attachment up to 10 MB; accept is image, pdf or image_or_pdf (default). Use it for a work-setup photo, a speed-test or typing-test screenshot, a portfolio PDF; say in help exactly what the picture should show. " +
+    "task is a work sample: brief (markdown, the scenario and what to hand in, with every fact they need) and minutes (how long it should take, shown to them); the answer is written and recorded like long_text. " +
+    "video is a short answer on camera, recorded in the browser (or a file they attach), up to maxSeconds (15 to 300, default 90). Use it for a hello or a spoken-English check, and make it optional unless speaking is the job.",
   items: {
     type: "object",
     properties: {
@@ -102,6 +111,9 @@ const QUESTION_SCHEMA = {
       knockout: { type: "object", properties: { accept: { type: "array", items: { type: "string" } }, min: { type: "number" }, max: { type: "number" } } },
       maxWords: { type: "number" },
       accept: { type: "string", enum: ["image", "pdf", "image_or_pdf"] },
+      brief: { type: "string", description: "task only: the scenario, markdown." },
+      minutes: { type: "number", description: "task only: how long it should take." },
+      maxSeconds: { type: "number", description: "video only: the recording limit in seconds." },
     },
     required: ["id", "label", "type"],
   },
@@ -123,6 +135,9 @@ const JOB_FIELDS = {
   rubric: str(
     "What makes an A, B or C applicant for this role, in the person's own words: 'A has run a support inbox solo and writes clear, warm replies'. rank_applicants follows it. Ask for it rather than inventing one.",
   ),
+  after_apply: str(
+    "What happens after someone applies, one step per line, up to six: 'We reply within three working days', 'A 30-minute written task', 'A call with the founder'. Shown on the thank-you screen. Only steps the person has told you; ask rather than invent a timeline.",
+  ),
 };
 
 function jobInput(args: Json): jobs.JobInput {
@@ -138,6 +153,7 @@ function jobInput(args: Json): jobs.JobInput {
     salaryPeriod: s(args, "salary_period"),
     description: s(args, "description"),
     rubric: s(args, "rubric"),
+    afterApply: s(args, "after_apply"),
     status: s(args, "status") as JobStatus | undefined,
   };
 }
@@ -309,7 +325,8 @@ export const TOOLS: McpTool[] = [
     description:
       "Every listing of one job side by side: applicants, how many met the must-haves, tiers (A, B, C, unranked), how many reached interview, hires, spend, and cost per applicant, per qualified applicant and per A-tier applicant. " +
       "Reach for it for 'which board is working', 'did variant B beat A', 'where should I spend'. Judge on A-tier and qualified applicants, not raw volume. " +
-      "Tier counts include assistant proposals the person hasn't decided on (tiers.proposalsOnly says how many); say so. Small numbers are small: say so before calling a winner.",
+      "Tier counts include assistant proposals the person hasn't decided on (tiers.proposalsOnly says how many); say so. Small numbers are small: say so before calling a winner. " +
+      "best names the leading listing, what it leads on, and whether there's enough to be confident. When there is a leader, suggest the next variant to test against it: change ONE thing (the title, the pay line, the opening, the must-haves) and say which, then create_listing with the same board and no variant letter.",
     inputSchema: object({ job_id: str("The job's id.") }, ["job_id"]),
     annotations: READ,
     handler: async (args, ctx) => listings.listingReport(ctx.userId, need(args, "job_id")),
@@ -331,7 +348,8 @@ export const TOOLS: McpTool[] = [
     name: "create_screening_form",
     title: "Create a screening form",
     description:
-      "A second form for applicants you've shortlisted: work samples, scenario questions, setup checks. Returns the form's id; get_screening_link makes the personal link for each applicant. " +
+      "A second form for applicants you've shortlisted: work samples, scenario questions, setup checks, a short video. Returns the form's id; get_screening_link makes the personal link for each applicant. " +
+      "For a work sample, use one task question with a brief that holds every fact the applicant needs and a realistic minutes figure (30 to 90 is kind); ask the person for the scenario rather than inventing their business details. " +
       "Open questions should be long_text so you can see how each answer was written. If you ask about AI use, say on the form that using AI is fine and you only want to understand how they work.",
     inputSchema: object({ job_id: str("The job's id."), name: str("What the applicant sees as the form's title."), questions: QUESTION_SCHEMA }, ["job_id", "questions"]),
     annotations: ADD,
@@ -413,13 +431,22 @@ export const TOOLS: McpTool[] = [
       "Each written answer has origin (TYPED, PASTED, MIXED, INJECTED for autofill or auto-typers, UNKNOWN), a one-line summary of what the page observed, and style signals with a label. " +
       "Read origin as observation and style as a weak hint: pasting from your own notes is pasting, and second-language writers trip style signals. Never call someone a cheat or reject them on provenance alone; " +
       "say what was observed ('pasted after 40 seconds away from the page', 'likely written with AI') and weigh it against what they said. " +
-      "Answers to file questions list their files; read_upload opens one. Also returns interviews with their scorecards, where the panel stands, and every offer version.",
+      "Answers to file questions list their files; read_upload opens one (video answers are listed but can't be read here; the person watches them in the app). " +
+      "Also returns interviews with their scorecards and any booking link, where the panel stands, every offer version, saved follow-up questions (probes), reference checks with what referees said, and the read-only share link if it's on.",
     inputSchema: object({ application_id: str("The application's id.") }, ["application_id"]),
     annotations: READ,
     handler: async (args, ctx) => {
       const id = need(args, "application_id");
-      const { screenToken: _t, ...rest } = await applications.getApplication(ctx.userId, id);
-      return { ...rest, ...(await interviews.interviewsAndOffers(ctx.userId, id)) };
+      const { screenToken: _t, sharePath, ...rest } = await applications.getApplication(ctx.userId, id);
+      const io = await interviews.interviewsAndOffers(ctx.userId, id);
+      const refs = await references.listReferences(ctx.userId, id);
+      return {
+        ...rest,
+        shareLink: sharePath ? `${ctx.baseUrl}${sharePath}` : null,
+        ...io,
+        interviews: io.interviews.map(({ bookingPath, ...i }) => ({ ...i, bookingLink: bookingPath ? `${ctx.baseUrl}${bookingPath}` : null })),
+        references: refs.map(({ path, ...r }) => ({ ...r, link: `${ctx.baseUrl}${path}` })),
+      };
     },
   },
   {
@@ -577,7 +604,8 @@ export const TOOLS: McpTool[] = [
     description:
       "Record an interview with an applicant: the screening call, the work sample review, the final. With application_id it adds the next round; with interview_id it changes only the fields you send, including status (DONE, CANCELLED, NO_SHOW). " +
       "This keeps the record; it doesn't send an invite or touch a calendar. To invite them, prep_message with kind INTERVIEW_INVITE, which reads what you saved here. If you have the person's calendar connector, create the event there too, only when they ask. " +
-      "Never invent a time or an interviewer: ask. Give scheduled_at in ISO 8601 with the time zone offset the person means. It doesn't move the applicant's stage; use move_stage if the person wants them in INTERVIEW.",
+      "Never invent a time or an interviewer: ask. Give scheduled_at in ISO 8601 with the time zone offset the person means. It doesn't move the applicant's stage; use move_stage if the person wants them in INTERVIEW. " +
+      "To let the applicant choose instead, pass offer_times: the times the person said they're free. That returns a booking link where the applicant sees those times in their own time zone and picks one, which becomes scheduled_at; no calendar needed. Offering again replaces the times; an empty list withdraws them. The invite then carries the link (prep_message INTERVIEW_INVITE).",
     inputSchema: object({
       application_id: str("The application, to add a new round."),
       interview_id: str("An interview's id, to change it."),
@@ -588,6 +616,7 @@ export const TOOLS: McpTool[] = [
       interviewers: str("Who they'll meet, as the person said it."),
       location: str("A meeting link or an address."),
       status: oneOf(["SCHEDULED", "DONE", "CANCELLED", "NO_SHOW"], "Only when changing an interview."),
+      offer_times: { type: "array", items: { type: "string" }, description: "Times for the applicant to pick from, ISO 8601 with offset, up to twelve. Use instead of scheduled_at." },
     }),
     annotations: ADD,
     handler: async (args, ctx) => {
@@ -600,10 +629,16 @@ export const TOOLS: McpTool[] = [
         location: s(args, "location"),
         status: s(args, "status"),
       };
+      const offer = args.offer_times;
+      if (offer !== undefined) {
+        if (!Array.isArray(offer) || offer.some((t) => typeof t !== "string")) throw new UserError("offer_times is a list of ISO 8601 times.");
+        if (input.scheduledAt && offer.length) throw new UserError("Give either scheduled_at or offer_times, not both.");
+      }
       const id = s(args, "interview_id");
-      const i = id ? await interviews.updateInterview(ctx.userId, id, input) : await interviews.addInterview(ctx.userId, need(args, "application_id"), input);
-      const { userId: _u, ...rest } = i;
-      return rest;
+      let i = id ? await interviews.updateInterview(ctx.userId, id, input) : await interviews.addInterview(ctx.userId, need(args, "application_id"), input);
+      if (offer !== undefined) i = await interviews.offerTimes(ctx.userId, i.id, offer as string[]);
+      const { userId: _u, bookToken, ...rest } = i;
+      return { ...rest, bookingLink: bookToken && rest.slots.length && !rest.scheduledAt ? `${ctx.baseUrl}${interviews.bookingPath(bookToken)}` : null };
     },
   },
   {
@@ -779,6 +814,154 @@ export const TOOLS: McpTool[] = [
       };
     },
   },
+  {
+    name: "daily_brief",
+    title: "Daily brief",
+    description:
+      "Everything that needs the person today, in one read: who applied since yesterday (or since), tier proposals waiting for a decision, applicants in SCREEN who haven't answered their screening form, interviews in the next 48 hours (with how many follow-up questions are still unasked), interviews waiting for the applicant to pick a time, interviews with no scorecard, unsent drafts, references that came in and offers waiting on an answer. " +
+      "Reach for it for 'what's on today', 'catch me up', 'what needs me'. Lead with what needs a decision or is time-bound; skip empty sections; give times in the person's time zone. Read-only.",
+    inputSchema: object({ since: str("Count new things from this moment, ISO 8601. Defaults to 24 hours ago.") }),
+    annotations: READ,
+    handler: (args, ctx) => brief.dailyBrief(ctx.userId, { since: s(args, "since") }),
+  },
+  {
+    name: "save_probes",
+    title: "Save follow-up questions",
+    description:
+      "Save the questions to ask one applicant on the call, shown on their page as 'Ask on the call'. Read get_application first, then aim each question at an answer that needs a second look: pasted, likely written with AI, thin, or a claim worth testing. " +
+      "A good probe asks for a real example only someone who did the work can give ('Walk me through the last time…'). why says what prompted it in a sentence the person can check; it's for them, never the applicant, and it never calls the applicant a cheat. " +
+      "With probes it REPLACES the whole list (up to twelve): read the current ones from get_application to keep them. With index and asked or note it changes one question only, e.g. after the call: asked true and a note of what they said.",
+    inputSchema: object(
+      {
+        application_id: str("The application's id."),
+        probes: {
+          type: "array",
+          description: "The whole list, in the order to ask. Each: { about: the question or answer it follows up on, question, why }.",
+          items: object({ about: str("Which answer this follows up on."), question: str("The question, in full."), why: str("What prompted it.") }, ["question"]),
+        },
+        index: num("To change one question: its position, from 0."),
+        asked: bool("Mark that question asked (true) or not yet (false)."),
+        note: str("What they said, briefly."),
+      },
+      ["application_id"],
+    ),
+    annotations: REPLACE,
+    handler: async (args, ctx) => {
+      const id = need(args, "application_id");
+      if (args.probes !== undefined) return { probes: await probes.saveProbes(ctx.userId, id, args.probes) };
+      const index = n(args, "index");
+      if (index === undefined) throw new UserError("Send probes to save the list, or index with asked or note to change one.");
+      return { probes: await probes.markProbe(ctx.userId, id, index, { asked: typeof args.asked === "boolean" ? args.asked : undefined, note: s(args, "note") }) };
+    },
+  },
+  {
+    name: "request_reference",
+    title: "Request a reference",
+    description:
+      "Ask one of an applicant's referees four short questions on a personal link: how they know them, what they were best at, what would help them do their best work, and whether they'd work with them again. " +
+      "Only for a referee the applicant or the person named; never look one up yourself. Returns the link and a suggested note to the referee. Nothing is sent: send it with the person's mail tool once they say so, or give them the note to send. " +
+      "Answers appear in get_application under references and in the daily brief.",
+    inputSchema: object(
+      {
+        application_id: str("The application's id."),
+        name: str("The referee's full name."),
+        email: str("Their email, if the person has it."),
+        relation: str("How they know the applicant, as given: 'manager at Acme, 2022 to 2024'."),
+      },
+      ["application_id", "name"],
+    ),
+    annotations: ADD,
+    handler: async (args, ctx) => {
+      const id = need(args, "application_id");
+      const r = await references.requestReference(ctx.userId, id, { name: need(args, "name"), email: s(args, "email"), relation: s(args, "relation") });
+      const a = await applications.getApplication(ctx.userId, id);
+      const url = `${ctx.baseUrl}${references.referencePath(r.token)}`;
+      return {
+        id: r.id,
+        referee: r.name,
+        email: r.email || null,
+        link: url,
+        note: references.referenceNote({ referee: r.name, candidate: a.candidate.name, job: a.job.title, company: ctx.user.companyName, from: ctx.user.name || ctx.user.companyName, url }),
+      };
+    },
+  },
+  {
+    name: "close_out_job",
+    title: "Close the loop on a role",
+    description:
+      "When a role is filled or closed, make sure everyone still waiting hears back. Saves one REJECTION draft for every applicant in NEW, SCREEN, INTERVIEW or REJECTED who hasn't already been sent or drafted one; OFFER and HIRED are never touched. " +
+      "ALWAYS call with dry_run true first and show the person who it covers and the preview; run it for real only after they say yes. " +
+      "subject and body are templates: {first_name}, {name}, {job}, {company}, {at_company} (' at Acme' or nothing) and {from} are filled per applicant. Leave them out for a short, kind default. Don't give a reason, and never mention how answers were typed or pasted. " +
+      "move_to_rejected also moves them to REJECTED; close_job also closes the job and every listing. It sends nothing: the drafts wait on each applicant's page, or go out through the person's mail tool (then save_message with status SENT).",
+    inputSchema: object(
+      {
+        job_id: str("The job's id."),
+        dry_run: bool("true: say who it would cover and show one filled message, saving nothing."),
+        subject: str("Subject template."),
+        body: str("Message template, plain text."),
+        move_to_rejected: bool("Also move each of them to REJECTED."),
+        close_job: bool("Also set the job to CLOSED and close its listings."),
+      },
+      ["job_id"],
+    ),
+    annotations: ADD,
+    handler: (args, ctx) =>
+      closeout.closeOutJob(ctx.userId, need(args, "job_id"), {
+        dryRun: args.dry_run === true,
+        subject: s(args, "subject"),
+        body: s(args, "body"),
+        moveToRejected: args.move_to_rejected === true,
+        closeJob: args.close_job === true,
+      }),
+  },
+  {
+    name: "share_applicant",
+    title: "Share an applicant",
+    description:
+      "Turn on or off a read-only link to one applicant, for a co-founder or hiring manager without an account. The page shows their name, the job, the tier and its reason, every answer with how it arrived, and interview scorecards; never their email, phone, notes, messages or files. " +
+      "Anyone with the link can see it, so give it only to the people the person names. Turning it off breaks the link for good; turning it on again makes a new one.",
+    inputSchema: object({ application_id: str("The application's id."), shared: bool("true for a link, false to turn it off.") }, ["application_id", "shared"]),
+    annotations: SET,
+    handler: async (args, ctx) => {
+      if (typeof args.shared !== "boolean") throw new UserError("shared is true or false.");
+      const r = await share.shareApplicant(ctx.userId, need(args, "application_id"), args.shared);
+      return { shared: r.shared, link: r.path ? `${ctx.baseUrl}${r.path}` : null };
+    },
+  },
+  {
+    name: "update_company",
+    title: "Update the company profile",
+    description:
+      "The company every public job page shows: its name, a few sentences about it, and its website. Changes only what you send. Write about in plain words from what the person tells you (what you make, who for, how you work), three or four sentences; never invent size, funding or perks.",
+    inputSchema: object({
+      company_name: str("The company's name."),
+      about: str("A few sentences about the company, plain text."),
+      website: str("Full address, starting with https://. Empty string clears it."),
+    }),
+    annotations: SET,
+    handler: async (args, ctx) => {
+      const u = await users.updateAccount(ctx.userId, { companyName: s(args, "company_name"), companyAbout: s(args, "about"), companyWebsite: s(args, "website") });
+      return { companyName: u.companyName, about: u.companyAbout, website: u.companyWebsite };
+    },
+  },
+  {
+    name: "load_sample_workspace",
+    title: "Load the sample workspace",
+    description:
+      "Fill the workspace with a made-up role, 'Customer Support Specialist (sample)', so the person can see how Recruited works before posting a real one: listings on two boards, six applicants whose answers arrived in different ways, tier proposals, an interview with a scorecard, one waiting for a time to be picked, follow-up questions and a draft. " +
+      "Offer it when the workspace is empty and the person wants to look around. Everything it makes is marked as sample; wipe_sample_workspace removes exactly that.",
+    inputSchema: object({}),
+    annotations: ADD,
+    handler: (_args, ctx) => sample.loadSampleWorkspace(ctx.userId),
+  },
+  {
+    name: "wipe_sample_workspace",
+    title: "Remove the sample workspace",
+    description: "Delete the sample role and its made-up applicants, and nothing else. Real jobs and applicants are never touched. Permanent: say so and get a yes first.",
+    inputSchema: object({}),
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
+    handler: (_args, ctx) => sample.wipeSampleWorkspace(ctx.userId),
+  },
 ];
 
 /**
@@ -802,6 +985,31 @@ export type McpPrompt = {
 };
 
 export const PROMPTS: McpPrompt[] = [
+  {
+    name: "morning_brief",
+    title: "Morning brief",
+    description: "What needs you today across every role, in order of what's time-bound, with a suggested next step for each.",
+    arguments: [],
+    render: () => `Give me my hiring brief for today.
+
+1. daily_brief.
+2. Start with anything time-bound: interviews in the next 48 hours (time in my time zone, and whether there are follow-up questions to ask), offers waiting on an answer, interviews still waiting for the applicant to pick a time.
+3. Then decisions only I can make: tier proposals to accept, scorecards to write, drafts to send.
+4. Then what's new: applicants since yesterday, screening forms not answered, references that came in.
+5. One line each, with a suggested next step I can say yes to. Skip anything empty. If nothing needs me, say so in one sentence.`,
+  },
+  {
+    name: "prepare_for_call",
+    title: "Prepare for a call",
+    description: "Read one applicant whole and write the follow-up questions to ask, aimed at the answers that need a second look.",
+    arguments: [{ name: "applicant", description: "Their name, or the application's id.", required: true }],
+    render: (a) => `Get me ready for my call with ${a.applicant}.
+
+1. Find them with list_applications if I gave a name, then get_application.
+2. Summarise in four lines: who they are, what stands out, where the panel stands, and anything still unknown.
+3. Write three to six follow-up questions and save them with save_probes. Aim them at answers that were pasted, likely written with AI, thin, or make a claim worth testing. Each asks for a real example only someone who did the work could give. Say why for each, as observation ("pasted after a minute away"), never as an accusation.
+4. Show me the questions. After the call I'll tell you how it went; then mark each one asked with a note, and record_scorecard from what I say.`,
+  },
   {
     name: "post_a_role",
     title: "Post a role everywhere",
