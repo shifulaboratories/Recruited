@@ -6,7 +6,8 @@
 export const MESSAGE_KINDS = ["SCREENING_INVITE", "INTERVIEW_INVITE", "REJECTION", "OFFER", "OTHER"] as const;
 export type MessageKindName = (typeof MESSAGE_KINDS)[number];
 
-export const KIND_LABEL: Record<MessageKindName, string> = {
+export const KIND_LABEL: Record<MessageKindName | "RECEIPT", string> = {
+  RECEIPT: "Receipt",
   SCREENING_INVITE: "Screening invite",
   INTERVIEW_INVITE: "Interview invite",
   REJECTION: "Rejection",
@@ -52,3 +53,26 @@ export function mailtoLink(to: string, subject: string, body: string): string {
  * length the app offers copy instead of "Open in email".
  */
 export const MAILTO_SAFE_LENGTH = 1800;
+
+/**
+ * The application receipt: the one message that goes out without a person
+ * saying send, and only when they connected a mailbox and left receipts on.
+ * It states a fact (the application arrived) and promises nothing, because no
+ * one has read it yet. A person may rewrite it; these four placeholders are
+ * all it can use.
+ */
+export const RECEIPT_PLACEHOLDERS = ["first_name", "job", "company", "sender"] as const;
+export const DEFAULT_RECEIPT_SUBJECT = "We have your application for {job}";
+export const DEFAULT_RECEIPT_BODY = `Hi {first_name},
+
+Thanks for applying for {job} at {company}. This is to confirm your application reached us.
+
+{sender}`;
+
+export function renderReceipt(template: string, vars: Record<(typeof RECEIPT_PLACEHOLDERS)[number], string>): string {
+  return template
+    .replace(/\{(\w+)\}/g, (whole, key: string) => ((RECEIPT_PLACEHOLDERS as readonly string[]).includes(key) ? vars[key as keyof typeof vars] : whole))
+    .replace(/ +([.,])/g, "$1")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}

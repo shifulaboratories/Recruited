@@ -1,21 +1,22 @@
-import type { MessageKind, MessageStatus } from "@prisma/client";
+import type { MessageStatus } from "@prisma/client";
 import { db } from "@/lib/db";
 import { notFound, UserError } from "@/lib/data/errors";
 import { requireApplication, screeningPath } from "@/lib/data/applications";
 import { readQuestions } from "@/lib/forms";
-import { KIND_GUIDANCE, MESSAGE_KINDS, mailtoLink } from "@/lib/messages";
+import { KIND_GUIDANCE, MESSAGE_KINDS, mailtoLink, type MessageKindName } from "@/lib/messages";
 import { formatOfferPay } from "@/lib/scorecards";
 import { bookingPath } from "@/lib/data/interviews";
 
 /**
- * Messages to applicants. This server never sends mail; it keeps drafts and a
- * record of what was sent. userId first everywhere; reads go through
+ * Messages to applicants: drafts, and a record of what was sent. Sending from
+ * the person's mailbox lives in mailbox.ts. userId first everywhere; reads go through
  * requireApplication, which excludes archived applications and jobs.
  */
 
-function checkKind(kind: string): MessageKind {
+/** The kinds a person or an assistant writes. RECEIPT is written only by the receipt itself. */
+function checkKind(kind: string): MessageKindName {
   if (!(MESSAGE_KINDS as readonly string[]).includes(kind)) throw new UserError(`kind is one of ${MESSAGE_KINDS.join(", ")}.`);
-  return kind as MessageKind;
+  return kind as MessageKindName;
 }
 
 /**

@@ -21,6 +21,7 @@ import {
   moveStage,
   recordOfferAction,
   saveMessageDraft,
+  sendMessageAction,
   setInterviewStatus,
   setOfferStatusAction,
   setTier,
@@ -32,6 +33,7 @@ import { KIND_LABEL, MAILTO_SAFE_LENGTH, MESSAGE_KINDS, mailtoLink } from "@/lib
 import { ArrivalBar, OriginBadge, ProvenanceBar, QualifiedChip, STAGE_LABEL, STAGE_TONE, StyleBadge, TierChip, tierTone } from "@/components/provenance";
 import { Avatar, Icon, SectionHead } from "@/components/ui";
 import { RecordedVideo } from "@/components/video-answer";
+import { getMailbox } from "@/lib/data/mailbox";
 
 function minutes(ms: number) {
   const m = Math.round(ms / 60000);
@@ -44,6 +46,7 @@ export default async function ApplicationPage({ params }: { params: Promise<{ id
   const a = await getApplication(user.id, id);
   const io = await interviewsAndOffers(user.id, id);
   const refs = await listReferences(user.id, id);
+  const mail = await getMailbox(user.id);
   const base = await baseUrl();
   const latestOffer = io.offers.at(-1);
   const board = a.listing ? `${boardByKey(a.listing.board)?.name ?? a.listing.board} · listing ${a.listing.variant}` : a.source || "added by hand";
@@ -568,7 +571,11 @@ export default async function ApplicationPage({ params }: { params: Promise<{ id
       <section className="space-y-3">
         <div className="flex flex-wrap items-baseline gap-x-3">
           <h2 className="h-section">Messages</h2>
-          <span className="text-xs text-rt-faint">Recruited never sends email. Open a draft in your own email, send it there, then mark it sent.</span>
+          <span className="text-xs text-rt-faint">
+            {mail.connected
+              ? `Send goes from ${mail.fromEmail}, your connected mailbox. Nothing goes out until you press it or tell Claude to send.`
+              : "Open a draft in your own email, send it there, then mark it sent. Connect a mailbox in Settings to send from here."}
+          </span>
         </div>
         {a.messages.length === 0 && <p className="card p-5 text-rt-muted">Nothing sent yet. Ask Claude to draft a screening invite, an interview invite or a rejection, or write one below.</p>}
         {a.messages.map((m) => {
@@ -580,11 +587,20 @@ export default async function ApplicationPage({ params }: { params: Promise<{ id
               <div className="flex flex-wrap items-center gap-2 text-xs">
                 <span className="font-mono uppercase tracking-wide text-rt-muted">{KIND_LABEL[m.kind]}</span>
                 <span className={draft ? "text-rt-muted" : "text-rt-foreground"}>
-                  {draft ? `Draft${m.writtenBy === "mcp" ? " from Claude" : ""} · ${day(m.createdAt)}` : `Sent ${day(m.sentAt ?? m.createdAt)}`}
+                  {draft
+                    ? `Draft${m.writtenBy === "mcp" ? " from Claude" : ""} · ${day(m.createdAt)}`
+                    : `Sent ${day(m.sentAt ?? m.createdAt)}${m.sentVia === "mailbox" ? ` from ${mail.connected ? mail.fromEmail : "your mailbox"}` : ""}`}
                 </span>
               </div>
+              {draft && m.sendError && <p className="text-xs text-rt-destructive">Didn&apos;t send: {m.sendError}</p>}
               {m.subject && <div className="font-medium">{m.subject}</div>}
               <div className="whitespace-pre-wrap text-rt-muted">{m.body}</div>
+              {draft && mail.connected && (
+                <ActionForm action={sendMessageAction} submit={`Send to ${a.candidate.email}`} className="pt-1">
+                  <input type="hidden" name="messageId" value={m.id} />
+                  <input type="hidden" name="applicationId" value={a.id} />
+                </ActionForm>
+              )}
               {draft && (
                 <div className="flex flex-wrap items-center gap-2 pt-1">
                   {mailto.length <= MAILTO_SAFE_LENGTH ? (

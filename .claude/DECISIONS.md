@@ -265,3 +265,32 @@ the company profile and the sample workspace. Calls worth remembering:
   person. No default: a page shouldn't go public until someone names it.
 - JobPosting leaves out anything not entered (no pay range, no baseSalary)
   rather than guessing, in line with the no-fabrication rule.
+
+## 2026-11-19 — Mail goes from the person's own mailbox; only the receipt goes by itself
+
+William chose "your mailbox over SMTP first: receipts automatic, everything else waits for
+a yes". This supersedes "the server never sends mail" from 17 Nov in one respect: once a
+person connects their own mailbox, Recruited sends from it. It still never sends as
+itself, which is what that entry protected.
+
+- SMTP rather than Gmail and Microsoft OAuth first: it covers both (with an app password)
+  and every other host, needs no OAuth client registered per instance, and keeps
+  `DATABASE_URL` the only variable, since the settings live in the `Mailbox` row. OAuth can
+  come later as another way to fill the same row.
+- nodemailer for the wire, pinned to 10.3.x (not the newest release, which was days old).
+  Hand-writing SMTP with STARTTLS and AUTH is where bugs live.
+- The receipt is the only automatic message. It states a fact and promises nothing, and
+  the rules test fails if the built-in wording promises a reply or a timeline. It goes
+  after the response with `after()`, so a slow or broken mail server never reaches the
+  applicant; a receipt that can't go stays as a draft with the reason, which the daily
+  brief shows. One per application.
+- Where Hired makes approval a click no tool can make, Recruited lets `send_message` send
+  after the person says send in the conversation, because running hiring from a
+  conversation is the product, and the roadmap item was "a send tool that asks first". Its
+  description says loudly that approval means this exact draft. What limits the damage
+  of a wrong call: it only sends saved drafts, only to the address on the applicant's row
+  (no argument takes an address), and at most 150 a day per workspace, receipts included.
+- `security: "none"` exists for a relay on the same private network, and is what lets the
+  probe run against its own fake SMTP server. The probe covers sign-in before save, the
+  password never coming back, one receipt per application, receipts off, send once, a
+  refusing server, the daily limit, no mailbox, and the cross-workspace refusal.

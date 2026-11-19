@@ -66,7 +66,7 @@ export async function dailyBrief(userId: string, opts: { since?: string; now?: D
       where: { userId, application: LIVE, status: "DRAFT" },
       orderBy: { createdAt: "asc" },
       take: 50,
-      select: { id: true, kind: true, subject: true, createdAt: true, application: { select: { id: true, ...who } } },
+      select: { id: true, kind: true, subject: true, sendError: true, createdAt: true, application: { select: { id: true, ...who } } },
     }),
     db.reference.findMany({
       where: { userId, application: LIVE, submittedAt: { gte: since } },
@@ -97,7 +97,7 @@ export async function dailyBrief(userId: string, opts: { since?: string; now?: D
     },
     waitingForApplicantToPickATime: { count: awaitingPick.length, items: awaitingPick.map((i) => ({ interviewId: i.id, title: i.title, slots: i.slots.length, ...app(i.application) })) },
     scorecardsMissing: { count: needScorecard.length, items: needScorecard.map((i) => ({ interviewId: i.id, title: i.title, at: i.scheduledAt, ...app(i.application) })) },
-    unsentDrafts: { count: drafts.length, items: drafts.map((m) => ({ messageId: m.id, kind: m.kind, subject: m.subject, ...app(m.application) })) },
+    unsentDrafts: { count: drafts.length, items: drafts.map((m) => ({ messageId: m.id, kind: m.kind, subject: m.subject, ...(m.sendError ? { didntSend: m.sendError } : {}), ...app(m.application) })) },
     referencesAnswered: { count: references.length, items: references.map((r) => ({ referee: r.name, at: r.submittedAt, ...app(r.application) })) },
     offersOut: { count: offers.length, items: offers.map((o) => ({ offerId: o.id, version: o.version, respondBy: o.respondBy, ...app(o.application) })) },
   };

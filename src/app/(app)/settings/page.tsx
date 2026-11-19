@@ -1,6 +1,16 @@
 import { baseUrl, requireUser } from "@/lib/auth";
 import { mcpPath, primaryConnection } from "@/lib/data/connections";
-import { loadSampleAction, rotateConnection, saveAccount, setSpamCheck, wipeSampleAction } from "@/server/actions";
+import {
+  connectMailboxAction,
+  disconnectMailboxAction,
+  loadSampleAction,
+  rotateConnection,
+  saveAccount,
+  saveReceiptAction,
+  setSpamCheck,
+  wipeSampleAction,
+} from "@/server/actions";
+import { getMailbox } from "@/lib/data/mailbox";
 import { spamCheckStatus } from "@/lib/data/settings";
 import { hasSample } from "@/lib/data/sample";
 import { ActionForm, CopyButton } from "@/components/forms";
@@ -15,6 +25,7 @@ export default async function SettingsPage() {
   const url = `${origin}${mcpPath(conn.token)}`;
   const sample = await hasSample(user.id);
   const spam = await spamCheckStatus();
+  const mail = await getMailbox(user.id);
   return (
     <div className="space-y-8 max-w-2xl">
       <header className="rise space-y-1.5">
@@ -76,6 +87,79 @@ export default async function SettingsPage() {
             </p>
           )}
         </ActionForm>
+      </section>
+
+      <section className="card p-5 space-y-4">
+        <div>
+          <h2 className="h-section mb-1">Your mailbox</h2>
+          <p className="text-[12.5px] text-rt-muted">
+            Recruited sends from your own email account, never from an address of its own. Once it&apos;s connected, everyone who applies through
+            an apply link gets a short receipt, and a draft goes out when you press Send on it or tell Claude to send it. Nothing else leaves
+            by itself, and no more than {mail.dailyLimit} a day.
+            {mail.connected ? ` Connected as ${mail.fromEmail}; ${mail.sentLast24h} sent in the last 24 hours.` : " Not connected."}
+          </p>
+        </div>
+        <ActionForm action={connectMailboxAction} submit={mail.connected ? "Save and test" : "Connect"}>
+          <p className="text-[12.5px] text-rt-faint">
+            Gmail: smtp.gmail.com, port 587, and an app password (Google account, Security, App passwords). Microsoft 365: smtp.office365.com, port 587.
+            Recruited signs in before saving, so a saved mailbox is one that works.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-[1fr_90px_170px] gap-3">
+            <label className="block space-y-1">
+              <span className="text-rt-muted">Mail server</span>
+              <input className="field" name="host" placeholder="smtp.gmail.com" defaultValue={mail.connected ? mail.host : ""} autoComplete="off" />
+            </label>
+            <label className="block space-y-1">
+              <span className="text-rt-muted">Port</span>
+              <input className="field" name="port" inputMode="numeric" defaultValue={mail.connected ? mail.port : 587} />
+            </label>
+            <label className="block space-y-1">
+              <span className="text-rt-muted">Security</span>
+              <select className="field" name="security" defaultValue={mail.connected ? mail.security : "starttls"}>
+                <option value="starttls">STARTTLS (587)</option>
+                <option value="tls">TLS (465)</option>
+                <option value="none">None (private relay)</option>
+              </select>
+            </label>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <label className="block space-y-1">
+              <span className="text-rt-muted">Username</span>
+              <input className="field" name="username" defaultValue={mail.connected ? mail.username : user.email} autoComplete="off" />
+            </label>
+            <label className="block space-y-1">
+              <span className="text-rt-muted">Password or app password{mail.connected ? " (saved; leave empty to keep it)" : ""}</span>
+              <input className="field" name="password" type="password" autoComplete="new-password" />
+            </label>
+            <label className="block space-y-1">
+              <span className="text-rt-muted">From address applicants see</span>
+              <input className="field" name="fromEmail" type="email" defaultValue={mail.connected ? mail.fromEmail : user.email} />
+            </label>
+            <label className="block space-y-1">
+              <span className="text-rt-muted">From name</span>
+              <input className="field" name="fromName" placeholder={user.companyName ? `${user.name || "Dana"} at ${user.companyName}` : ""} defaultValue={mail.connected ? mail.fromName : ""} />
+            </label>
+          </div>
+        </ActionForm>
+        {mail.connected && (
+          <>
+            <ActionForm action={saveReceiptAction} submit="Save receipt" className="border-t border-rt-border pt-4">
+              <label className="flex items-center gap-2">
+                <input type="checkbox" name="on" defaultChecked={mail.receipt.on} />
+                <span>Send a receipt to everyone who applies</span>
+              </label>
+              <p className="text-[12.5px] text-rt-faint">
+                Leave these empty for the wording shown. You can use {"{first_name}"}, {"{job}"}, {"{company}"} and {"{sender}"}. A receipt says the
+                application arrived; promise a reply only if you mean to keep it.
+              </p>
+              <input className="field" name="subject" placeholder={mail.defaultReceipt.subject} defaultValue={mail.receipt.subject} />
+              <textarea className="field min-h-28" name="body" placeholder={mail.defaultReceipt.body} defaultValue={mail.receipt.body} />
+            </ActionForm>
+            <form action={disconnectMailboxAction}>
+              <button className="btn btn-quiet text-xs">Disconnect the mailbox</button>
+            </form>
+          </>
+        )}
       </section>
 
       <section className="card p-5">
