@@ -37,7 +37,7 @@ export async function publicListing(listingSlug: string) {
     where: { slug: listingSlug },
     include: {
       job: { include: { forms: { where: { kind: "APPLICATION" } } } },
-      user: { select: { companyName: true, companyAbout: true, companyWebsite: true } },
+      user: { select: { companyName: true, companyAbout: true, companyWebsite: true, mailbox: { select: { receiptOn: true } } } },
     },
   });
   if (!l || l.job.archivedAt) return null;
@@ -52,6 +52,8 @@ export async function publicListing(listingSlug: string) {
     company: l.user.companyName,
     companyAbout: l.user.companyAbout,
     companyWebsite: l.user.companyWebsite,
+    /** Whether a receipt is emailed after applying, so the thank-you page doesn't say otherwise. */
+    emailsReceipt: !!l.user.mailbox?.receiptOn,
     afterApply: l.job.afterApply,
     board: l.board,
     title: l.title,
