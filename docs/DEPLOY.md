@@ -21,6 +21,10 @@ you already posted keep the old address, though.
 5. Open the deploy logs and find the lines after "Recruited is ready. Sign in with:".
    Sign in, then change the email and password under Connect Claude, Your account.
 
+If you lose the password later, ask Claude for a password reset link while it's connected,
+or use "Forgot your password?" on the sign-in page: the link it makes is printed to these
+same logs. Links work once, for an hour.
+
 `railway.json` sets everything else: Nixpacks runs `npm run build`, the start command
 applies migrations before starting, and the healthcheck waits for `/login`. Railway
 builds with Nixpacks rather than the Dockerfile on purpose; see the comment at the top

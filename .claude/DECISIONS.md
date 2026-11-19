@@ -210,3 +210,17 @@ the company profile and the sample workspace. Calls worth remembering:
 - instrumentation.ts must keep its dynamic import inside the
   `NEXT_RUNTIME === "nodejs"` branch; after an early return Next still bundles
   it for edge and `npm run dev` breaks on node:crypto.
+
+## 2026-11-19 — Password reset without mail
+
+- Two ways to a reset link, because the server sends no mail: the connected
+  assistant (`get_password_reset_link`, for the connection's own account
+  only) and "Forgot your password?", which prints the link to the server log.
+  The MCP token already reads everything in the workspace, so a link behind it
+  grants nothing new.
+- The forgot form answers the same whether or not the address has an
+  account, and is rate limited with the public forms.
+- Tokens are stored as SHA-256. The link is spent in the same conditional
+  write that checks it, and a reset ends every session the account had.
+- When connected mail lands (roadmap item 11), the forgot form should email
+  the link too; the log stays as the fallback for a self-hoster with no mail.

@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { currentUser } from "@/lib/auth";
 import { login } from "@/server/actions";
@@ -35,7 +36,8 @@ export default async function LoginPage() {
           </ActionForm>
         </div>
         <p className="text-rt-faint text-xs">
-          First time? The owner account&apos;s password is printed once in the server log when the app first starts.
+          First time? The owner account&apos;s password is printed once in the server log when the app first starts.{" "}
+          <Link href="/login/forgot" className="underline">Forgot your password?</Link>
         </p>
       </div>
     </main>

@@ -32,6 +32,7 @@ model User {
   createdAt      DateTime @default(now())
 
   sessions     Session[]
+  resets       PasswordReset[]
   connections  Connection[]
   jobs         Job[]
   listings     Listing[]
@@ -55,6 +56,20 @@ model Session {
   expiresAt DateTime
   createdAt DateTime @default(now())
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+/// A one-time link to set a new password, valid for an hour. Only a SHA-256
+/// of the token is stored, so a database read can't be turned into a sign-in.
+model PasswordReset {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
 }

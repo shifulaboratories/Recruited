@@ -1,4 +1,4 @@
-import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
+import { createHash, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { db } from "@/lib/db";
 import { UserError } from "@/lib/data/errors";
 
@@ -68,4 +68,63 @@ export async function updateAccount(
     data.passwordHash = hashPassword(input.password);
   }
   return db.user.update({ where: { id: userId }, data });
+}
+
+// ---------------------------------------------------------------------------
+// Password reset. A link carries a random token; only its SHA-256 is stored.
+// It works once, for an hour, and using it signs the account out everywhere.
+// This server sends no mail, so a link reaches its owner one of two ways: the
+// connected assistant asks for one (resetLinkFor, behind the MCP token), or
+// the sign-in page's "Forgot your password?" prints it to the server log,
+// where whoever runs the instance can read it.
+// ---------------------------------------------------------------------------
+
+const RESET_MINUTES = 60;
+const hashToken = (token: string) => createHash("sha256").update(token).digest("hex");
+
+export function resetPath(token: string) {
+  return `/reset/${token}`;
+}
+
+async function mintReset(userId: string) {
+  const token = randomBytes(32).toString("base64url");
+  await db.passwordReset.create({ data: { userId, tokenHash: hashToken(token), expiresAt: new Date(Date.now() + RESET_MINUTES * 60_000) } });
+  return { token, minutes: RESET_MINUTES };
+}
+
+/** A reset link for the signed-in or connected person's own account. */
+export async function resetLinkFor(userId: string) {
+  return mintReset(userId);
+}
+
+/** A reset link for whoever owns this email, or null. The caller must not say which. */
+export async function resetLinkForEmail(email: string) {
+  const user = await db.user.findUnique({ where: { email: email.trim().toLowerCase() } });
+  if (!user) return null;
+  return { ...(await mintReset(user.id)), email: user.email };
+}
+
+/** Whether a reset link can still be used, for the page that shows the form. */
+export async function resetIsUsable(token: string) {
+  const r = await db.passwordReset.findUnique({ where: { tokenHash: hashToken(token) } });
+  return !!r && !r.usedAt && r.expiresAt > new Date();
+}
+
+/**
+ * Set a new password from a reset link. The link is spent in the same
+ * conditional write that checks it, so two submits can't both use it, and
+ * every session the account had is ended.
+ */
+export async function resetPassword(token: string, password: string) {
+  if (password.length < 10) throw new UserError("Use at least 10 characters for the password.");
+  const tokenHash = hashToken(token);
+  return db.$transaction(async (tx) => {
+    const spent = await tx.passwordReset.updateMany({ where: { tokenHash, usedAt: null, expiresAt: { gt: new Date() } }, data: { usedAt: new Date() } });
+    if (spent.count !== 1) throw new UserError("This link has expired or was already used. Ask for a new one.");
+    const r = await tx.passwordReset.findUniqueOrThrow({ where: { tokenHash } });
+    await tx.user.update({ where: { id: r.userId }, data: { passwordHash: hashPassword(password) } });
+    await tx.session.deleteMany({ where: { userId: r.userId } });
+    await tx.passwordReset.deleteMany({ where: { userId: r.userId, usedAt: null } });
+    return { userId: r.userId };
+  });
 }
