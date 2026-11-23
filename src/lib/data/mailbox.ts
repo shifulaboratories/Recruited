@@ -2,7 +2,7 @@ import { db } from "@/lib/db";
 import { notFound, UserError } from "@/lib/data/errors";
 import { recordError } from "@/lib/data/system";
 import { SECURITY, sendSmtp, smtpReason, verifySmtp, type SmtpConfig } from "@/lib/smtp";
-import { DEFAULT_RECEIPT_BODY, DEFAULT_RECEIPT_SUBJECT, renderReceipt } from "@/lib/messages";
+import { BULK_LIMIT, DEFAULT_RECEIPT_BODY, DEFAULT_RECEIPT_SUBJECT, renderReceipt } from "@/lib/messages";
 import { statusPath } from "@/lib/applicant-status";
 
 /**
@@ -166,6 +166,37 @@ export async function sendMessage(userId: string, messageId: string) {
   if (!mailbox) throw new UserError("No mailbox is connected, so nothing can be sent from here. Connect one in Settings, or send from your own email and mark the message sent.");
   if ((await sentLast24h(userId)) >= DAILY_LIMIT) throw new UserError(`That's ${DAILY_LIMIT} sent in the last 24 hours, the most this workspace sends in a day. The draft is kept; send it later.`);
   return deliver(userId, mailbox, m.id);
+}
+
+/**
+ * Send several drafts the person approved as a batch. Checks the daily limit
+ * for the whole batch first, then sends one at a time; one that fails (already
+ * sent, or the server refused it) is reported and the rest still go.
+ */
+export async function sendMany(userId: string, messageIds: string[]) {
+  const ids = Array.from(new Set(messageIds.filter(Boolean)));
+  if (!ids.length) throw new UserError("Name at least one draft.");
+  if (ids.length > BULK_LIMIT) throw new UserError(`Send at most ${BULK_LIMIT} at a time.`);
+  const found = await db.message.count({ where: { id: { in: ids }, userId, application: { archivedAt: null, job: { archivedAt: null } } } });
+  if (found !== ids.length) notFound("message");
+  const mailbox = await db.mailbox.findUnique({ where: { userId } });
+  if (!mailbox) throw new UserError("No mailbox is connected, so nothing can be sent from here. Connect one in Settings, or send from your own email and mark the messages sent.");
+  const left = DAILY_LIMIT - (await sentLast24h(userId));
+  if (ids.length > left) throw new UserError(`That's ${ids.length} to send and ${Math.max(left, 0)} left of today's ${DAILY_LIMIT}. Nothing was sent; send fewer, or the rest tomorrow.`);
+  const results: { id: string; sent: boolean; error?: string }[] = [];
+  for (const id of ids) {
+    try {
+      const m = await db.message.findFirst({ where: { id, userId }, select: { status: true, body: true } });
+      if (m?.status === "SENT") throw new UserError("Already sent.");
+      if (!m?.body.trim()) throw new UserError("The message is empty.");
+      await deliver(userId, mailbox, id);
+      results.push({ id, sent: true });
+    } catch (e) {
+      if (!(e instanceof UserError)) throw e;
+      results.push({ id, sent: false, error: e.message });
+    }
+  }
+  return { sent: results.filter((r) => r.sent).length, failed: results.filter((r) => !r.sent).length, results };
 }
 
 /**

@@ -24,7 +24,7 @@ You tell Claude what you're hiring for. It writes the job, an application form, 
 - **Every day and at the end.** `daily_brief` says what needs you today, and the jobs screen shows the same list. `close_out_job` drafts a kind note to everyone still waiting when a role is filled. `share_applicant` makes a read-only link for someone without an account.
 - **A sample workspace** to look around before posting a real role, removed in one step without touching real data.
 - **Your team.** Invite the people you hire with as recruiter, hiring manager (only the jobs you give them) or interviewer (only the interviews they're on, and their own scorecard). Each signs in with their own password and connects their own Claude, which reaches only what their role does.
-- **48 MCP tools and 5 prompts** (`morning_brief`, `prepare_for_call`, `post_a_role`, `review_applicants`, `message_applicants`). The app has the screens a person needs to look and adjust: jobs, applicants, one applicant's answers, and Connect Claude.
+- **49 MCP tools and 5 prompts** (`morning_brief`, `prepare_for_call`, `post_a_role`, `review_applicants`, `message_applicants`). The app has the screens a person needs to look and adjust: jobs, applicants, one applicant's answers, and Connect Claude.
 
 ## Connect your AI
 

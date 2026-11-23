@@ -86,3 +86,17 @@ export function renderReceipt(template: string, vars: Record<(typeof RECEIPT_PLA
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 }
+
+/** The kinds one message to several applicants may be. An offer is one person's terms, so it's written one at a time. */
+export const BULK_KINDS = ["SCREENING_INVITE", "INTERVIEW_INVITE", "REJECTION", "OTHER"] as const satisfies readonly MessageKindName[];
+/** At most this many applicants in one bulk draft or send. */
+export const BULK_LIMIT = 50;
+
+/** What one message to several applicants can fill in per person: the receipt's, plus their own screening form link. */
+export const BULK_PLACEHOLDERS = [...RECEIPT_PLACEHOLDERS, "screening_link"] as const;
+
+/** Placeholders a bulk message uses that it can't fill. Those would reach the applicant as braces. */
+export function unknownPlaceholders(text: string): string[] {
+  const known = BULK_PLACEHOLDERS as readonly string[];
+  return Array.from(new Set([...text.matchAll(/\{(\w+)\}/g)].map(([, k]) => k).filter((k) => !known.includes(k))));
+}

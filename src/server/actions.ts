@@ -25,6 +25,7 @@ import * as team from "@/lib/data/team";
 import { updateAccount, userByLogin } from "@/lib/data/users";
 import { overLimit } from "@/lib/data/ratelimit";
 import { UserError } from "@/lib/data/errors";
+import { toolAllowed } from "@/lib/team";
 
 /**
  * Server actions for the UI. None takes a userId: the caller is resolved from
@@ -40,10 +41,12 @@ export type ActionState = { error?: string; ok?: string } | undefined;
  * job. A refusal is a UserError; the screens hide what a role can't do, so one
  * only reaches someone who went around them.
  */
-async function seated(check: { owner?: true; full?: true; applicationId?: string; interviewId?: string; jobId?: string } = {}) {
+async function seated(check: { owner?: true; full?: true; tool?: string; applicationId?: string; interviewId?: string; jobId?: string } = {}) {
   const s = await requireSeat();
   if (check.owner) team.requireOwner(s.seat);
   if (check.full) team.requireFull(s.seat);
+  // The same line the role's tools draw: what an assistant can't do for them, the screen can't either.
+  if (check.tool && !toolAllowed(s.seat.role, check.tool)) throw new UserError("You don't have access to that in this workspace.");
   await team.reach(s.seat, { applicationId: check.applicationId, interviewId: check.interviewId, jobId: check.jobId });
   return s;
 }
@@ -135,7 +138,7 @@ export async function setListingStatus(listingId: string, status: ListingStatus)
 
 /** Move to a stage, or to one of the job's own steps by id (the board and the applicant page pass the step). */
 export async function moveStage(applicationId: string, stage: Stage | undefined, step?: string) {
-  const { userId } = await seated({ applicationId });
+  const { userId } = await seated({ tool: "move_stage", applicationId });
   const a = await applications.moveStage(userId, applicationId, stage, step);
   revalidatePath(`/applications/${applicationId}`);
   revalidatePath(`/jobs/${a.jobId}`);
@@ -148,6 +151,47 @@ export async function setJobStepsAction(jobId: string, steps: { id?: string; lab
     await jobs.setJobSteps(userId, jobId, steps);
     revalidatePath(`/jobs/${jobId}`);
   }, "Saved.");
+}
+
+/** The Applicants page's bar: move everyone ticked. A hiring manager may, for applicants on their jobs. */
+export async function bulkMoveAction(ids: string[], stage: Stage): Promise<ActionState> {
+  const { userId, seat } = await seated({ tool: "move_stage" });
+  for (const applicationId of ids) await team.reach(seat, { applicationId });
+  const r = await attempt(async () => {
+    const moved = await applications.moveMany(userId, ids, stage);
+    for (const jobId of new Set(moved.map((m) => m.jobId))) revalidatePath(`/jobs/${jobId}`);
+  }, `Moved ${ids.length}.`);
+  revalidatePath("/applications");
+  return r;
+}
+
+export type BulkDraftState = { error?: string; drafted?: { messageId: string; name: string }[]; skipped?: string[] } | undefined;
+
+/** One message to everyone ticked, saved as a draft each. Sends nothing. */
+export async function bulkDraftAction(ids: string[], input: { kind: string; subject: string; body: string }): Promise<BulkDraftState> {
+  const { userId } = await seated({ full: true });
+  try {
+    const r = await messages.draftMany(userId, { applicationIds: ids, ...input, dryRun: false, writtenBy: "app", baseUrl: await baseUrl() });
+    if (r.dryRun) return undefined;
+    for (const id of ids) revalidatePath(`/applications/${id}`);
+    return { drafted: r.applicants.map((a) => ({ messageId: a.messageId, name: a.name })), skipped: r.skipped.map((x) => x.name) };
+  } catch (e) {
+    if (e instanceof UserError) return { error: e.message };
+    throw e;
+  }
+}
+
+/** Send the drafts just saved, after the person pressed Send on them. */
+export async function bulkSendAction(messageIds: string[]): Promise<ActionState> {
+  const { userId } = await seated({ full: true });
+  try {
+    const r = await mailbox.sendMany(userId, messageIds);
+    revalidatePath("/applications");
+    return r.failed ? { error: `Sent ${r.sent}. ${r.failed} didn't go: ${r.results.find((x) => !x.sent)?.error ?? ""}` } : { ok: `Sent ${r.sent}.` };
+  } catch (e) {
+    if (e instanceof UserError) return { error: e.message };
+    throw e;
+  }
 }
 
 export async function addNote(_: ActionState, form: FormData): Promise<ActionState> {
