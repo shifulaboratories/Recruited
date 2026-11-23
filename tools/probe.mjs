@@ -344,6 +344,29 @@ try {
     ok((await db.candidate.count({ where: { userId: a.id, email: `dee-${stamp}@probe.invalid` } })) === 1, "the import saved nothing");
   });
 
+  await check("a job's own stages", async () => {
+    const steps = await call("update_job", a, { job_id: job.id, stages: [{ label: "Phone screen", stage: "SCREEN" }, { label: "Trial task", stage: "SCREEN" }] });
+    ok(steps.steps.length === 7 && steps.steps[1].label === "Phone screen" && steps.steps[0].label === "New", `effective steps: ${JSON.stringify(steps.steps.map((s) => s.label))}`);
+    const trial = steps.steps.find((s) => s.label === "Trial task");
+    const moved = await call("move_stage", a, { application_id: app, step: "trial task" });
+    ok(moved.stage === "SCREEN" && moved.step === "Trial task", `moving by step name: ${JSON.stringify(moved)}`);
+    const got = await call("get_job", a, { job_id: job.id });
+    ok(got.steps.find((s) => s.id === trial.id).applicants >= 1, "get_job doesn't count the applicant on their step");
+    ok((await call("get_application", a, { application_id: app })).step === "Trial task", "get_application doesn't say the step");
+    ok((await call("list_applications", a, { job_id: job.id })).applications.find((x) => x.id === app).step === "Trial task", "list_applications doesn't say the step");
+    await refuses(call("move_stage", a, { application_id: app, step: "Reference call" }), /This job's stages are/);
+    await refuses(call("move_stage", a, { application_id: app, step: "Trial task", stage: "INTERVIEW" }), /is in SCREEN/);
+    await refuses(call("update_job", a, { job_id: job.id, stages: [{ label: "Call", stage: "SCREEN" }, { label: "call", stage: "INTERVIEW" }] }), /two stages called/);
+    await refuses(call("update_job", a, { job_id: job.id, stages: [{ label: "Odd", stage: "MAYBE" }] }), /needs a stage kind/);
+    // Renaming keeps the id, so the applicant stays put; a stage alone clears the step.
+    await call("update_job", a, { job_id: job.id, stages: [{ label: "Phone screen", stage: "SCREEN" }, { id: trial.id, label: "Paid trial", stage: "SCREEN" }] });
+    ok((await call("get_application", a, { application_id: app })).step === "Paid trial", "a rename moved the applicant off their step");
+    await call("move_stage", a, { application_id: app, stage: "SCREEN" });
+    ok((await db.application.findUnique({ where: { id: app } })).step === null, "a stage move kept the old step");
+    await call("update_job", a, { job_id: job.id, stages: [] });
+    ok((await call("get_job", a, { job_id: job.id })).steps.length === 6, "an empty list didn't go back to the six");
+  });
+
   await check("interviews, scorecards and offers", async () => {
     const i = await call("schedule_interview", a, { application_id: app, title: "Call with the founder", format: "video", scheduled_at: "2026-12-01T14:00:00+08:00", interviewers: "William" });
     const interviewId = i.id ?? i.interviewId ?? i.interview?.id;

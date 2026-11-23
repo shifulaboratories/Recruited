@@ -133,11 +133,21 @@ export async function setListingStatus(listingId: string, status: ListingStatus)
   revalidatePath(`/jobs/${l.jobId}`);
 }
 
-export async function moveStage(applicationId: string, stage: Stage) {
+/** Move to a stage, or to one of the job's own steps by id (the board and the applicant page pass the step). */
+export async function moveStage(applicationId: string, stage: Stage | undefined, step?: string) {
   const { userId } = await seated({ applicationId });
-  const a = await applications.moveStage(userId, applicationId, stage);
+  const a = await applications.moveStage(userId, applicationId, stage, step);
   revalidatePath(`/applications/${applicationId}`);
   revalidatePath(`/jobs/${a.jobId}`);
+}
+
+/** Replace a job's own stages from the job page's editor. */
+export async function setJobStepsAction(jobId: string, steps: { id?: string; label: string; stage: string }[]): Promise<ActionState> {
+  const { userId } = await seated({ full: true, jobId });
+  return attempt(async () => {
+    await jobs.setJobSteps(userId, jobId, steps);
+    revalidatePath(`/jobs/${jobId}`);
+  }, "Saved.");
 }
 
 export async function addNote(_: ActionState, form: FormData): Promise<ActionState> {

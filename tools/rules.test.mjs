@@ -328,3 +328,31 @@ test("jobScope narrows to the allowed jobs, and a job outside them matches nothi
   assert.deepEqual(jobScope("j2", ["j1", "j2"]), { jobId: { in: ["j2"] } });
   assert.deepEqual(jobScope("j3", ["j1"]), { jobId: { in: [] } });
 });
+
+test("a job's own steps fill in the stages they leave out, in stage order", async () => {
+  const { checkSteps, effectiveSteps, stepOf, findStep, stepToSave } = await import("../src/lib/steps.ts");
+  const r = checkSteps([{ label: "Trial task", stage: "SCREEN" }, { label: "Founder call", stage: "INTERVIEW" }, { label: "Phone screen", stage: "SCREEN" }]);
+  assert.ok("steps" in r);
+  assert.deepEqual(r.steps.map((s) => s.label), ["Trial task", "Phone screen", "Founder call"]);
+  const all = effectiveSteps(r.steps);
+  assert.deepEqual(all.map((s) => s.label), ["New", "Trial task", "Phone screen", "Founder call", "Offer", "Hired", "Not this time"]);
+  // A missing or stale step falls back to the first step of the stage.
+  assert.equal(stepOf({ stage: "SCREEN", step: null }, all).label, "Trial task");
+  assert.equal(stepOf({ stage: "SCREEN", step: "gone" }, all).label, "Trial task");
+  assert.equal(stepOf({ stage: "INTERVIEW", step: "trial-task" }, all).label, "Founder call");
+  assert.equal(findStep(all, "phone SCREEN").id, "phone-screen");
+  assert.equal(findStep(all, "offer").stage, "OFFER");
+  assert.equal(stepToSave(findStep(all, "OFFER")), null);
+  assert.equal(stepToSave(findStep(all, "Phone screen")), "phone-screen");
+});
+
+test("steps refuse duplicates, unknown stages, empty names and too many", async () => {
+  const { checkSteps, MAX_STEPS } = await import("../src/lib/steps.ts");
+  assert.ok("error" in checkSteps([{ label: "Call", stage: "SCREEN" }, { label: "call ", stage: "OFFER" }]));
+  assert.ok("error" in checkSteps([{ label: "Call", stage: "LATER" }]));
+  assert.ok("error" in checkSteps([{ label: "  ", stage: "SCREEN" }]));
+  assert.ok("error" in checkSteps(Array.from({ length: MAX_STEPS + 1 }, (_, i) => ({ label: `S${i}`, stage: "SCREEN" }))));
+  // A kept id survives a rename; a clashing slug gets a suffix.
+  const r = checkSteps([{ id: "trial", label: "Paid trial", stage: "SCREEN" }, { label: "Trial", stage: "INTERVIEW" }]);
+  assert.deepEqual(r.steps.map((s) => s.id), ["trial", "trial-2"]);
+});

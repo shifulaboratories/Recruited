@@ -82,6 +82,12 @@ export const CASES = [
     expect: ["move_stage", "list_applications"],
     why: "An explicit ask to move is the person's decision, so moving is right.",
   },
+  {
+    prompt: "For the bookkeeper role, add a paid trial task between the phone screen and the interview.",
+    expect: ["get_job", "list_jobs"],
+    avoid: ["update_job"],
+    why: "update_job's stages replaces the job's steps; writing it without reading drops the phone screen and strands whoever is on it.",
+  },
   // --- Messages: the ones that leave the building -----------------------------------
   {
     prompt: "Write a rejection for Ben.",

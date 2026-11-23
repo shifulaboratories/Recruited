@@ -227,7 +227,7 @@ export const TOOLS: McpTool[] = [
     name: "get_job",
     title: "Get a job",
     description:
-      "One role whole: the description, pay, every listing with its apply link, its application and screening forms with their questions, and applicants per stage. Read this before update_job or before writing listings for it.",
+      "One role whole: the description, pay, every listing with its apply link, its application and screening forms with their questions, applicants per stage, and steps: the job's pipeline in order, each with its id, name, the fixed stage it sits in and how many applicants are on it. Read this before update_job or before writing listings for it.",
     inputSchema: object({ job_id: str("The job's id, from list_jobs.") }, ["job_id"]),
     annotations: READ,
     handler: async (args, ctx) => {
@@ -259,12 +259,42 @@ export const TOOLS: McpTool[] = [
     title: "Update a job",
     description:
       "Change a role's fields. Only the fields you send change; description is replaced whole, so read it with get_job, edit, and send it back complete. " +
-      "status OPEN makes its listings' apply pages accept applications; CLOSED stops them.",
-    inputSchema: object({ job_id: str("The job's id."), ...JOB_FIELDS, status: oneOf(JOB_STATUS, "DRAFT, OPEN or CLOSED.") }, ["job_id"]),
+      "status OPEN makes its listings' apply pages accept applications; CLOSED stops them. " +
+      "stages gives the job its own pipeline steps, like 'Phone screen' and 'Trial task', each inside one of the six fixed stages (NEW, SCREEN, INTERVIEW, OFFER, HIRED, REJECTED). " +
+      "It REPLACES the job's steps: read get_job's steps first and send every one back with its id, or applicants on a step you leave out drop to the first step of its stage. " +
+      "A stage you give no step keeps its usual name; an empty list goes back to the six. Applicants never change stage because of this.",
+    inputSchema: object(
+      {
+        job_id: str("The job's id."),
+        ...JOB_FIELDS,
+        status: oneOf(JOB_STATUS, "DRAFT, OPEN or CLOSED."),
+        stages: {
+          type: "array",
+          description: "The job's own steps, in order, at most 15. Replaces the list.",
+          items: {
+            type: "object",
+            properties: {
+              id: { type: "string", description: "Keep a step's id from get_job when renaming it, so its applicants stay on it. Leave out for a new step." },
+              label: { type: "string", description: "What the team calls it, under 40 characters." },
+              stage: { type: "string", enum: [...STAGE_VALUES], description: "Which fixed stage it sits in. That's what the applicant's status page and the reports read." },
+            },
+            required: ["label", "stage"],
+          },
+        },
+      },
+      ["job_id"],
+    ),
     annotations: SET,
     handler: async (args, ctx) => {
-      const j = await jobs.updateJob(ctx.userId, need(args, "job_id"), jobInput(args));
-      return { id: j.id, title: j.title, status: j.status, pay: jobs.formatPay(j) };
+      const id = need(args, "job_id");
+      const input = jobInput(args);
+      const j = Object.values(input).some((v) => v !== undefined) || args.stages === undefined ? await jobs.updateJob(ctx.userId, id, input) : await jobs.requireJob(ctx.userId, id);
+      const out: Json = { id: j.id, title: j.title, status: j.status, pay: jobs.formatPay(j) };
+      if (args.stages !== undefined) {
+        if (!Array.isArray(args.stages)) throw new UserError("stages is a list of { label, stage }.");
+        out.steps = await jobs.setJobSteps(ctx.userId, id, args.stages as { id?: string; label: string; stage: string }[]);
+      }
+      return out;
     },
   },
   {
@@ -805,12 +835,18 @@ export const TOOLS: McpTool[] = [
     name: "move_stage",
     title: "Move an applicant",
     description:
-      "Move an application to another stage: NEW, SCREEN, INTERVIEW, OFFER, HIRED or REJECTED. Moving a stage sends the applicant nothing; offer to draft the matching message with prep_message.",
-    inputSchema: object({ application_id: str("The application's id."), stage: oneOf(STAGE_VALUES, "The new stage.") }, ["application_id", "stage"]),
+      "Move an application to another stage: NEW, SCREEN, INTERVIEW, OFFER, HIRED or REJECTED. " +
+      "When the job has its own steps (get_job's steps, like 'Trial task'), give step instead, by name or id: that sets the stage it sits in. A stage alone puts them on that stage's first step. " +
+      "Moving sends the applicant nothing; offer to draft the matching message with prep_message.",
+    inputSchema: object({
+      application_id: str("The application's id."),
+      stage: oneOf(STAGE_VALUES, "The new stage. Leave out when you give step."),
+      step: str("One of the job's own steps, by name or id. Use when the person names a step rather than a stage."),
+    }, ["application_id"]),
     annotations: SET,
     handler: async (args, ctx) => {
-      const a = await applications.moveStage(ctx.userId, need(args, "application_id"), need(args, "stage") as Stage);
-      return { id: a.id, stage: a.stage };
+      const a = await applications.moveStage(ctx.userId, need(args, "application_id"), s(args, "stage") as Stage | undefined, s(args, "step"));
+      return { id: a.id, stage: a.stage, step: a.stepLabel };
     },
   },
   {

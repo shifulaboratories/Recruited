@@ -207,7 +207,7 @@ export async function submitApplication(listingSlug: string, p: PublicPayload) {
   const hasKnockouts = questions.some((q) => q.knockout);
   return db.$transaction(async (tx) => {
     const app = existing
-      ? await tx.application.update({ where: { id: existing.id }, data: { archivedAt: null, stage: "NEW", listingId: l.id, qualified: hasKnockouts ? built.failed.length === 0 : null } })
+      ? await tx.application.update({ where: { id: existing.id }, data: { archivedAt: null, stage: "NEW", step: null, listingId: l.id, qualified: hasKnockouts ? built.failed.length === 0 : null } })
       : await tx.application.create({
           data: {
             userId,

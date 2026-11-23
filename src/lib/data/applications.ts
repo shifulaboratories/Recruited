@@ -6,6 +6,7 @@ import { requireJob } from "@/lib/data/jobs";
 import { secret } from "@/lib/ids";
 import { styleLabel } from "@/lib/provenance";
 import { readProbes } from "@/lib/probes";
+import { effectiveSteps, findStep, readSteps, stepOf, stepToSave } from "@/lib/steps";
 
 /**
  * Candidates, applications, stages and notes. userId first everywhere.
@@ -57,7 +58,7 @@ export async function addApplicant(
   const already = await db.application.findUnique({ where: { jobId_candidateId: { jobId: job.id, candidateId: candidate.id } } });
   if (already && !already.archivedAt) throw new UserError(`${candidate.name} has already applied to this job (application ${already.id}).`);
   const app = already
-    ? await db.application.update({ where: { id: already.id }, data: { archivedAt: null, stage: "NEW", source: input.source ?? "", listingId: input.listingId ?? null } })
+    ? await db.application.update({ where: { id: already.id }, data: { archivedAt: null, stage: "NEW", step: null, source: input.source ?? "", listingId: input.listingId ?? null } })
     : await db.application.create({
         data: {
           userId,
@@ -78,10 +79,31 @@ export async function requireApplication(userId: string, applicationId: string) 
   return a;
 }
 
-export async function moveStage(userId: string, applicationId: string, stage: Stage) {
-  if (!STAGES.includes(stage)) throw new UserError(`stage is one of ${STAGES.join(", ")}.`);
+/**
+ * Move an application to a stage, or to one of its job's own steps (by id or
+ * name), which sets the stage that step sits in. A stage alone puts it on that
+ * stage's first step.
+ */
+export async function moveStage(userId: string, applicationId: string, stage: Stage | undefined, step?: string) {
+  if (stage !== undefined && !STAGES.includes(stage)) throw new UserError(`stage is one of ${STAGES.join(", ")}.`);
   const a = await requireApplication(userId, applicationId);
-  return db.application.update({ where: { id: a.id }, data: { stage } });
+  if (step === undefined || step === "") {
+    if (!stage) throw new UserError("Say which stage, or which of the job's stages by name.");
+    const moved = await db.application.update({ where: { id: a.id }, data: { stage, step: null } });
+    return { ...moved, stepLabel: await stepLabel(userId, moved) };
+  }
+  const job = await db.job.findFirst({ where: { id: a.jobId, userId }, select: { steps: true } });
+  const steps = effectiveSteps(readSteps(job?.steps));
+  const target = findStep(steps, step);
+  if (!target) throw new UserError(`This job's stages are: ${steps.map((s) => s.label).join(", ")}. "${step}" isn't one.`);
+  if (stage && stage !== target.stage) throw new UserError(`"${target.label}" is in ${target.stage}, not ${stage}. Give just the step.`);
+  const moved = await db.application.update({ where: { id: a.id }, data: { stage: target.stage, step: stepToSave(target) } });
+  return { ...moved, stepLabel: target.label };
+}
+
+async function stepLabel(userId: string, a: { jobId: string; stage: Stage; step: string | null }) {
+  const job = await db.job.findFirst({ where: { id: a.jobId, userId }, select: { steps: true } });
+  return stepOf(a, effectiveSteps(readSteps(job?.steps))).label;
 }
 
 export async function addNote(userId: string, applicationId: string, body: string, writtenBy: "app" | "mcp") {
@@ -152,7 +174,7 @@ export async function listApplications(
     take: Math.min(opts.limit ?? 100, 500),
     include: {
       candidate: { select: { name: true, email: true } },
-      job: { select: { title: true } },
+      job: { select: { title: true, steps: true } },
       listing: { select: { board: true, variant: true } },
       submissions: { select: { answers: { select: { origin: true, styleScore: true, value: true, telemetry: true } } } },
     },
@@ -166,6 +188,7 @@ export async function listApplications(
       candidate: a.candidate.name,
       email: a.candidate.email,
       stage: a.stage,
+      ...(({ id, label }) => ({ step: label, stepId: id }))(stepOf(a, effectiveSteps(readSteps(a.job.steps)))),
       qualified: a.qualified,
       ...tierView(a),
       source: a.listing ? `${a.listing.board} ${a.listing.variant}` : a.source || "added by hand",
@@ -184,7 +207,7 @@ export async function getApplication(userId: string, applicationId: string) {
     where: { id: applicationId, userId, archivedAt: null, job: { archivedAt: null } },
     include: {
       candidate: true,
-      job: { select: { id: true, title: true } },
+      job: { select: { id: true, title: true, steps: true } },
       listing: { select: { id: true, board: true, variant: true, title: true } },
       notes: { orderBy: { createdAt: "asc" } },
       messages: { orderBy: { createdAt: "asc" } },
@@ -200,13 +223,19 @@ export async function getApplication(userId: string, applicationId: string) {
   });
   if (!a) notFound("application");
   const answers = a.submissions.flatMap((s) => s.answers);
+  const steps = effectiveSteps(readSteps(a.job.steps));
   return {
     id: a.id,
     stage: a.stage,
+    /** Which of the job's own stages it's on; the stage's usual name when the job has none of its own. */
+    step: stepOf(a, steps).label,
+    stepId: stepOf(a, steps).id,
+    /** The job's stages in order, for moving it. */
+    jobSteps: steps,
     qualified: a.qualified,
     ...tierView(a),
     appliedAt: a.createdAt,
-    job: a.job,
+    job: { id: a.job.id, title: a.job.title },
     listing: a.listing,
     source: a.source,
     candidate: { id: a.candidate.id, name: a.candidate.name, email: a.candidate.email, phone: a.candidate.phone, links: a.candidate.links },

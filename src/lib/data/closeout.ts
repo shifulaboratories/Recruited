@@ -69,7 +69,7 @@ export async function closeOutJob(
         },
       }),
     ),
-    ...(input.moveToRejected ? [db.application.updateMany({ where: { userId, id: { in: apps.map((a) => a.id) } }, data: { stage: "REJECTED" } })] : []),
+    ...(input.moveToRejected ? [db.application.updateMany({ where: { userId, id: { in: apps.map((a) => a.id) } }, data: { stage: "REJECTED", step: null } })] : []),
     ...(input.closeJob
       ? [
           db.job.update({ where: { id: job.id }, data: { status: "CLOSED", closedAt: job.status === "CLOSED" ? undefined : new Date() } }),

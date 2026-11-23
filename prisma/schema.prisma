@@ -185,6 +185,8 @@ model Job {
   closedAt       DateTime?
   /// What applicants are told happens after they apply, shown on the thank-you page. Empty uses the default.
   afterApply     String    @default("")
+  /// The job's own stages: [{ id, label, stage }], each inside one of the six fixed stages. See src/lib/steps.ts.
+  steps          Json      @default("[]")
   /// Part of the demo workspace (load_sample_workspace). wipe_sample_workspace deletes only these.
   sample         Boolean   @default(false)
   archivedAt     DateTime?
@@ -308,6 +310,8 @@ model Application {
   /// Where it came from when there is no listing: "referral", "sourced", a board name.
   source         String    @default("")
   stage          Stage     @default(NEW)
+  /// Which of the job's own stages (Job.steps id) it's on, inside `stage`. Null means the stage's first.
+  step           String?
   /// Whether every knockout question so far was answered acceptably. Null when no form had one.
   qualified      Boolean?
   /// The tier a person decided (in the app, or by telling their assistant). Null until then.
