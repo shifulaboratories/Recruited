@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import { notFound, UserError } from "@/lib/data/errors";
 import { requireApplication, screeningPath } from "@/lib/data/applications";
 import { readQuestions } from "@/lib/forms";
-import { KIND_GUIDANCE, MESSAGE_KINDS, mailtoLink, type MessageKindName } from "@/lib/messages";
+import { BULK_KINDS, BULK_LIMIT, KIND_GUIDANCE, MESSAGE_KINDS, mailtoLink, renderReceipt, unknownPlaceholders, type MessageKindName } from "@/lib/messages";
 import { formatOfferPay } from "@/lib/scorecards";
 import { bookingPath } from "@/lib/data/interviews";
 import { statusPath } from "@/lib/applicant-status";
@@ -101,6 +101,79 @@ export async function saveMessage(
       sentAt: status === "SENT" ? new Date() : null,
     },
   });
+}
+
+/**
+ * One message to several applicants: a draft each, with {first_name}, {job},
+ * {company}, {sender} and {status_link} filled in per person. Saves nothing on
+ * a dry run, which returns the first one filled in and who it would go to.
+ * Skips anyone who already has an unsent draft of the same kind, so running it
+ * twice doesn't double up. Sends nothing: sending is send_message's, after a yes.
+ */
+export async function draftMany(
+  userId: string,
+  input: { applicationIds: string[]; kind: string; subject?: string; body: string; dryRun?: boolean; writtenBy: "app" | "mcp"; baseUrl: string },
+) {
+  const kind = checkKind(input.kind);
+  if (!(BULK_KINDS as readonly string[]).includes(kind)) throw new UserError("An offer states one person's terms, so it's written one at a time: prep_message, then save_message.");
+  const ids = Array.from(new Set(input.applicationIds.filter(Boolean)));
+  if (!ids.length) throw new UserError("Name at least one application.");
+  if (ids.length > BULK_LIMIT) throw new UserError(`Write to at most ${BULK_LIMIT} applicants at a time.`);
+  const subject = (input.subject ?? "").trim();
+  const body = input.body.trim();
+  if (!body) throw new UserError("The message is empty.");
+  if (body.length > 5000) throw new UserError("Keep the message under 5000 characters.");
+  const unknown = unknownPlaceholders(`${subject}\n${body}`);
+  if (unknown.length)
+    throw new UserError(
+      `${unknown.map((k) => `{${k}}`).join(", ")} can't be filled in for each person; only {first_name}, {job}, {company}, {sender}, {status_link} and {screening_link} can. Write the rest out, or message them one at a time.`,
+    );
+  const wantsScreening = /\{screening_link\}/.test(`${subject}\n${body}`);
+  const apps = await db.application.findMany({
+    where: { id: { in: ids }, userId, archivedAt: null, job: { archivedAt: null } },
+    select: {
+      id: true,
+      screenToken: true,
+      candidate: { select: { name: true, email: true } },
+      job: { select: { title: true, forms: { where: { kind: "SCREENING" }, select: { slug: true } } } },
+      messages: { where: { kind, status: "DRAFT" }, select: { id: true } },
+    },
+  });
+  if (apps.length !== ids.length) notFound("application");
+  apps.sort((x, y) => ids.indexOf(x.id) - ids.indexOf(y.id));
+  if (wantsScreening)
+    for (const a of apps)
+      if (a.job.forms.length !== 1)
+        throw new UserError(
+          a.job.forms.length
+            ? `${a.job.title} has ${a.job.forms.length} screening forms, so {screening_link} can't tell which. Message those applicants one at a time with prep_message.`
+            : `${a.job.title} has no screening form, so there's no {screening_link} to send. Make one with create_form first.`,
+        );
+  const owner = await db.user.findUniqueOrThrow({ where: { id: userId }, select: { name: true, companyName: true, mailbox: { select: { fromName: true } } } });
+  const company = owner.companyName || "our company";
+  const fill = (a: (typeof apps)[number], t: string) =>
+    renderReceipt(wantsScreening ? t.replaceAll("{screening_link}", `${input.baseUrl}${screeningPath(a.screenToken, a.job.forms[0].slug)}`) : t, {
+      first_name: a.candidate.name.trim().split(/\s+/)[0] || "there",
+      job: a.job.title,
+      company,
+      sender: owner.mailbox?.fromName || owner.name || company,
+      status_link: `${input.baseUrl}${statusPath(a.screenToken)}`,
+    });
+  const skipped = apps.filter((a) => a.messages.length).map((a) => ({ applicationId: a.id, name: a.candidate.name, why: "already has an unsent draft of this kind" }));
+  const todo = apps.filter((a) => !a.messages.length);
+  const preview = todo[0] ? { to: todo[0].candidate.name, subject: fill(todo[0], subject), body: fill(todo[0], body) } : null;
+  const who = todo.map((a) => ({ applicationId: a.id, name: a.candidate.name, email: a.candidate.email }));
+  if (input.dryRun) return { dryRun: true as const, wouldDraft: who.length, applicants: who, skipped, preview };
+  const saved = await db.$transaction(
+    todo.map((a) =>
+      db.message.create({
+        data: { userId, applicationId: a.id, kind, status: "DRAFT", subject: fill(a, subject), body: fill(a, body), writtenBy: input.writtenBy },
+        select: { id: true, applicationId: true },
+      }),
+    ),
+  );
+  const byApp = new Map(saved.map((m) => [m.applicationId, m.id]));
+  return { dryRun: false as const, drafted: saved.length, applicants: who.map((w) => ({ ...w, messageId: byApp.get(w.applicationId)! })), skipped, preview };
 }
 
 async function requireMessage(userId: string, messageId: string) {

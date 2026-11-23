@@ -72,6 +72,8 @@ async function callTool(name: string, args: Record<string, unknown>, ctx: McpCon
     // Every id a narrow role sends must be one its seat reaches, before the tool runs.
     const id = (k: string) => (typeof args?.[k] === "string" ? (args[k] as string) : undefined);
     await reach(ctx.seat, { jobId: id("job_id"), applicationId: id("application_id"), interviewId: id("interview_id"), uploadId: id("upload_id") });
+    // A list of applications (bulk moves and drafts): every one of them.
+    if (Array.isArray(args?.application_ids)) for (const a of args.application_ids) if (typeof a === "string") await reach(ctx.seat, { applicationId: a });
     const result = await tool.handler(args ?? {}, ctx);
     if (result && typeof result === "object" && MCP_CONTENT in result) return { content: (result as Record<string, unknown>)[MCP_CONTENT] };
     return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }], structuredContent: Array.isArray(result) ? { items: result } : result };

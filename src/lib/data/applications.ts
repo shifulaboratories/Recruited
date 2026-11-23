@@ -6,7 +6,7 @@ import { requireJob } from "@/lib/data/jobs";
 import { secret } from "@/lib/ids";
 import { styleLabel } from "@/lib/provenance";
 import { readProbes } from "@/lib/probes";
-import { effectiveSteps, findStep, readSteps, stepOf, stepToSave } from "@/lib/steps";
+import { DEFAULT_STEP_LABEL, effectiveSteps, findStep, readSteps, stepOf, stepToSave } from "@/lib/steps";
 
 /**
  * Candidates, applications, stages and notes. userId first everywhere.
@@ -99,6 +99,35 @@ export async function moveStage(userId: string, applicationId: string, stage: St
   if (stage && stage !== target.stage) throw new UserError(`"${target.label}" is in ${target.stage}, not ${stage}. Give just the step.`);
   const moved = await db.application.update({ where: { id: a.id }, data: { stage: target.stage, step: stepToSave(target) } });
   return { ...moved, stepLabel: target.label };
+}
+
+/**
+ * Move several applications at once, all or none: every id and the target are
+ * checked before anything moves. A step is found by name in each one's own
+ * job, so "Trial task" works across jobs that all have one.
+ */
+export async function moveMany(userId: string, applicationIds: string[], stage: Stage | undefined, step?: string) {
+  const ids = Array.from(new Set(applicationIds.filter(Boolean)));
+  if (!ids.length) throw new UserError("Name at least one application.");
+  if (ids.length > 200) throw new UserError("Move at most 200 at a time.");
+  if (stage !== undefined && !STAGES.includes(stage)) throw new UserError(`stage is one of ${STAGES.join(", ")}.`);
+  if (!stage && !step) throw new UserError("Say which stage, or which of the job's stages by name.");
+  const apps = await db.application.findMany({
+    where: { id: { in: ids }, userId, archivedAt: null, job: { archivedAt: null } },
+    select: { id: true, jobId: true, candidate: { select: { name: true } }, job: { select: { title: true, steps: true } } },
+  });
+  if (apps.length !== ids.length) notFound("application");
+  apps.sort((x, y) => ids.indexOf(x.id) - ids.indexOf(y.id));
+  const plan = apps.map((a) => {
+    if (!step) return { a, stage: stage!, step: null as string | null, label: DEFAULT_STEP_LABEL[stage!] };
+    const steps = effectiveSteps(readSteps(a.job.steps));
+    const target = findStep(steps, step);
+    if (!target) throw new UserError(`${a.job.title} has no stage called "${step}". Its stages are: ${steps.map((s) => s.label).join(", ")}. Nothing was moved.`);
+    if (stage && stage !== target.stage) throw new UserError(`"${target.label}" is in ${target.stage}, not ${stage}. Give just the step. Nothing was moved.`);
+    return { a, stage: target.stage, step: stepToSave(target), label: target.label };
+  });
+  await db.$transaction(plan.map((p) => db.application.update({ where: { id: p.a.id }, data: { stage: p.stage, step: p.step } })));
+  return plan.map((p) => ({ id: p.a.id, name: p.a.candidate.name, jobId: p.a.jobId, stage: p.stage, step: p.label }));
 }
 
 async function stepLabel(userId: string, a: { jobId: string; stage: Stage; step: string | null }) {

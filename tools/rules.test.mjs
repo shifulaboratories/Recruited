@@ -356,3 +356,11 @@ test("steps refuse duplicates, unknown stages, empty names and too many", async 
   const r = checkSteps([{ id: "trial", label: "Paid trial", stage: "SCREEN" }, { label: "Trial", stage: "INTERVIEW" }]);
   assert.deepEqual(r.steps.map((s) => s.id), ["trial", "trial-2"]);
 });
+
+test("a bulk message refuses placeholders it can't fill", async () => {
+  const { unknownPlaceholders, renderReceipt, BULK_KINDS } = await import("../src/lib/messages.ts");
+  assert.deepEqual(unknownPlaceholders("Hi {first_name}, your call is at {time} on {time}."), ["time"]);
+  assert.deepEqual(unknownPlaceholders("Hi {first_name}, thanks for applying for {job} at {company}. {status_link} {sender}"), []);
+  assert.ok(!BULK_KINDS.includes("OFFER"));
+  assert.equal(renderReceipt("Hi {first_name}.\nSee {status_link}\n{sender}", { first_name: "Ana", job: "", company: "", sender: "Dana", status_link: "" }), "Hi Ana.\nDana");
+});

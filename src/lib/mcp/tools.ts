@@ -24,7 +24,7 @@ import { careersPath } from "@/lib/data/public";
 import { statusPath } from "@/lib/applicant-status";
 import { BOARDS, BOARD_KEYS, boardByKey } from "@/lib/boards";
 import { QUESTION_TYPES } from "@/lib/forms";
-import { MESSAGE_KINDS } from "@/lib/messages";
+import { BULK_KINDS, MESSAGE_KINDS } from "@/lib/messages";
 import { SECURITY } from "@/lib/smtp";
 import { IMPORT_FIELDS, type ImportField } from "@/lib/csv";
 import { MEMBER_ROLES, ROLE_SUMMARY } from "@/lib/team";
@@ -837,14 +837,22 @@ export const TOOLS: McpTool[] = [
     description:
       "Move an application to another stage: NEW, SCREEN, INTERVIEW, OFFER, HIRED or REJECTED. " +
       "When the job has its own steps (get_job's steps, like 'Trial task'), give step instead, by name or id: that sets the stage it sits in. A stage alone puts them on that stage's first step. " +
-      "Moving sends the applicant nothing; offer to draft the matching message with prep_message.",
+      "To move several people at once (\"move everyone who did the trial to interview\"), give application_ids instead of application_id: all of them move or none do, and a step is found by name in each one's own job. " +
+      "Moving sends the applicant nothing; offer to draft the matching message with prep_message, or draft_messages for several.",
     inputSchema: object({
       application_id: str("The application's id."),
+      application_ids: { type: "array", items: { type: "string" }, description: "Several applications' ids, up to 200, instead of application_id." },
       stage: oneOf(STAGE_VALUES, "The new stage. Leave out when you give step."),
       step: str("One of the job's own steps, by name or id. Use when the person names a step rather than a stage."),
-    }, ["application_id"]),
+    }),
     annotations: SET,
     handler: async (args, ctx) => {
+      const many = list(args, "application_ids");
+      if (many) {
+        if (s(args, "application_id")) throw new UserError("Give application_id or application_ids, not both.");
+        const moved = await applications.moveMany(ctx.userId, many, s(args, "stage") as Stage | undefined, s(args, "step"));
+        return { moved: moved.length, applications: moved };
+      }
       const a = await applications.moveStage(ctx.userId, need(args, "application_id"), s(args, "stage") as Stage | undefined, s(args, "step"));
       return { id: a.id, stage: a.stage, step: a.stepLabel };
     },
@@ -921,6 +929,39 @@ export const TOOLS: McpTool[] = [
     },
   },
   {
+    name: "draft_messages",
+    title: "Draft one message to several applicants",
+    description:
+      "Write one message once and save a draft of it for each of several applicants: a screening invite to everyone you just moved to screening, a rejection to the ones you're passing on, an update to a whole job. " +
+      "Use prep_message on one of them first for the guidance on that kind of message, and write it the way that guidance says. " +
+      "subject and body may use {first_name}, {job}, {company}, {sender}, {status_link} (each applicant's own status page) and {screening_link} (their own link to the job's screening form, when it has exactly one), filled in per person; any other {placeholder} is refused, so write out anything else, and if a detail differs per person (an interview time, a reason), message them one at a time instead. " +
+      "Never invent a time, a pay figure or a reason the person didn't give you. Not for offers. " +
+      "dry_run defaults to TRUE: it returns the first message filled in and who it would go to, saving nothing. Show the person that, then call again with dry_run false to save the drafts. " +
+      "Skips anyone who already has an unsent draft of the same kind. It never sends: once the person has read the drafts and said send, send_message with message_ids sends the batch.",
+    inputSchema: object(
+      {
+        application_ids: { type: "array", items: { type: "string" }, description: "The applications to write to, up to 50, from list_applications." },
+        kind: oneOf(BULK_KINDS, "What the message is for. Offers are written one at a time."),
+        subject: str("The subject line. May use the placeholders."),
+        body: str("The message as each applicant will read it, plain text, with placeholders for what differs per person."),
+        dry_run: bool("true (default) to preview without saving; false to save a draft for each."),
+      },
+      ["application_ids", "kind", "body"],
+    ),
+    annotations: ADD,
+    handler: async (args, ctx) => {
+      return messages.draftMany(ctx.userId, {
+        applicationIds: list(args, "application_ids") ?? [],
+        kind: need(args, "kind"),
+        subject: s(args, "subject"),
+        body: need(args, "body"),
+        dryRun: args.dry_run !== false,
+        writtenBy: "mcp",
+        baseUrl: ctx.baseUrl,
+      });
+    },
+  },
+  {
     name: "send_message",
     title: "Send a draft from the person's mailbox",
     description:
@@ -928,10 +969,19 @@ export const TOOLS: McpTool[] = [
       "Call it ONLY after the person has seen this exact draft, subject and body, in this conversation and said send. Approval of a plan, a template or a different draft is not approval of this one; when sending to several applicants, show each draft (or one in full and the rest as a list) and get a yes for the batch first. " +
       "It sends a draft saved with save_message, to the address on the applicant's record (there is no way to give another address), and marks it SENT. " +
       "It refuses when no mailbox is connected (then send through the person's mail connector or their app, and mark it with save_message status SENT), when the draft was already sent, and past 150 sends in 24 hours. " +
-      "If their mail server refuses, nothing is marked sent and the server's reason comes back: tell the person in plain words.",
-    inputSchema: object({ message_id: str("The draft's id, from save_message.") }, ["message_id"]),
+      "If their mail server refuses, nothing is marked sent and the server's reason comes back: tell the person in plain words. " +
+      "message_ids sends a batch the person approved (from draft_messages), up to 50: the daily limit is checked for the whole batch first, then each is sent; one that fails is reported and the rest still go.",
+    inputSchema: object({
+      message_id: str("The draft's id, from save_message."),
+      message_ids: { type: "array", items: { type: "string" }, description: "Several drafts' ids, up to 50, instead of message_id. Only drafts the person saw and said send to." },
+    }),
     annotations: SEND,
     handler: async (args, ctx) => {
+      const many = list(args, "message_ids");
+      if (many) {
+        if (s(args, "message_id")) throw new UserError("Give message_id or message_ids, not both.");
+        return mailbox.sendMany(ctx.userId, many);
+      }
       const m = await mailbox.sendMessage(ctx.userId, need(args, "message_id"));
       return { id: m.id, status: m.status, sentAt: m.sentAt, sentVia: m.sentVia, page: `${ctx.baseUrl}/applications/${m.applicationId}` };
     },
@@ -1370,9 +1420,9 @@ Do this in order, and stop to ask whenever you'd otherwise have to invent someth
     render: (a) => `Draft a ${a.kind} for ${a.who} applying to "${a.job}".
 
 1. Find the job with list_jobs, then the applicants with list_applications. Show me the list and wait for me to confirm it before writing anything.
-2. For each one: prep_message, then write the message following its guidance, using their first name and, for a screening invite, their own screening link. Ask me once for anything the guidance needs that I haven't given you (a deadline, interview times, who they'll meet); never fill it in yourself.
-3. save_message each one as a DRAFT.
-4. Show me one in full and the rest as a list. If you have my mail connector, send only after I say so, then save_message each with status SENT. Otherwise tell me they're waiting on each applicant's page under Messages.
+2. prep_message for one of them, and write the message following its guidance, using their first name and, for a screening invite, their own screening link. Ask me once for anything the guidance needs that I haven't given you (a deadline, interview times, who they'll meet); never fill it in yourself.
+3. If the same words fit everyone, draft_messages with the placeholders, dry run first, and show me the preview; once I say yes, save them. If something differs per person, prep_message and save_message each one as a DRAFT instead.
+4. Show me one in full and the rest as a list. Send only after I say so: send_message with message_ids if a mailbox is connected, or my mail connector and then save_message each with status SENT. Otherwise tell me they're waiting on each applicant's page under Messages.
 5. Don't move anyone's stage unless I ask.`,
   },
 ];

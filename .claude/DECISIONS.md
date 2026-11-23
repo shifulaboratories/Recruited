@@ -427,3 +427,27 @@ No new tool: `update_job` gained `stages`, which replaces the list (the descript
 read `get_job` first and send ids back, and an eval case guards the trap), and
 `move_stage` gained `step`. Per-stage automations (send this form when someone reaches
 "Trial task") are a later item; the step id is what they'd key on.
+
+## 2026-11-23 — Bulk move and bulk message: lists on the tools that exist, one new tool for drafting
+
+Roadmap item 23. Moving many is `move_stage` with `application_ids`, not a new tool: same
+verb, same rules, and the handler runs `reach` on every id in the list, so a hiring
+manager can bulk move only their own job's applicants. It's all or none: every target is
+resolved before anything is written, so "Trial task" missing from one job moves nobody.
+
+Messaging many needs one new tool, `draft_messages`, because the work is different from
+`save_message`: one text, filled in per person. Only placeholders the server can fill
+truthfully are allowed ({first_name}, {job}, {company}, {sender}, {status_link},
+{screening_link}); anything else ({time}, {reason}) is refused rather than left as braces
+or guessed, which is the no-fabrication rule applied to templates. {screening_link}
+refuses a job with zero or several screening forms instead of picking one. Offers are
+refused: they state one person's terms. It defaults to a dry run and skips anyone with an
+unsent draft of the same kind, so a retried call doesn't double up.
+
+Sending stays a separate step: `send_message` takes `message_ids`. The daily cap is
+checked for the whole batch before the first send, so a batch never stops halfway on the
+cap; a single failure (already sent, a server refusal) is reported per message and the
+rest still go. In the app, the Applicants page's bar saves the drafts first and offers
+"Send all N" as a second press. Server actions now also check the role's tool list
+(`seated({ tool })`), which closed a gap where an interviewer's session could have moved
+an applicant they were interviewing through the old stage action.

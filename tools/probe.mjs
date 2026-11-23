@@ -506,6 +506,35 @@ try {
     await refuses(call("send_message", a, { message_id: draft.id }), /already sent/);
   });
 
+  await check("one message to several applicants: previewed, drafted once each, sent as a batch", async () => {
+    const two = [passing.applicationId, failing.applicationId];
+    const body = "Hi {first_name},\n\nThanks for applying for {job}. See where you stand: {status_link}\n\n{sender}";
+    const before = await db.message.count({ where: { userId: a.id } });
+    const preview = await call("draft_messages", a, { application_ids: two, kind: "OTHER", subject: "{job}: an update", body });
+    ok(preview.dryRun === true && preview.wouldDraft === 2 && /^Hi Ana,/.test(preview.preview.body) && preview.preview.body.includes("/status/"), `the preview: ${JSON.stringify(preview).slice(0, 300)}`);
+    ok((await db.message.count({ where: { userId: a.id } })) === before, "a dry run saved drafts");
+    const screening = await call("draft_messages", a, { application_ids: two, kind: "SCREENING_INVITE", body: "Hi {first_name}, a few questions: {screening_link}" });
+    ok(/\/f\/.+\?t=/.test(screening.preview.body), `{screening_link} wasn't the applicant's own link: ${screening.preview.body}`);
+    await refuses(call("draft_messages", a, { application_ids: two, kind: "OTHER", body: "Your call is at {time}.", dry_run: false }), /\{time\} can't be filled in/);
+    await refuses(call("draft_messages", a, { application_ids: two, kind: "OFFER", body: "x", dry_run: false }), /one at a time/);
+    const saved = await call("draft_messages", a, { application_ids: two, kind: "OTHER", subject: "{job}: an update", body, dry_run: false });
+    ok(saved.drafted === 2 && saved.applicants.every((x) => x.messageId), "draft_messages didn't save two");
+    const again = await call("draft_messages", a, { application_ids: two, kind: "OTHER", body, dry_run: false });
+    ok(again.drafted === 0 && again.skipped.length === 2, "running it twice doubled the drafts");
+    const sentBefore = smtp.received.length;
+    const sent = await call("send_message", a, { message_ids: saved.applicants.map((x) => x.messageId) });
+    ok(sent.sent === 2 && smtp.received.length === sentBefore + 2, `the batch sent ${sent.sent}`);
+    const resent = await call("send_message", a, { message_ids: saved.applicants.map((x) => x.messageId) });
+    ok(resent.sent === 0 && resent.failed === 2, "a sent message went again");
+    // A bulk move is all or none.
+    const stages = await db.application.findMany({ where: { id: { in: two } }, select: { id: true, stage: true, step: true } });
+    await refuses(call("move_stage", a, { application_ids: two, step: "Nowhere" }), /Nothing was moved/);
+    ok((await db.application.findMany({ where: { id: { in: two } } })).every((x, i) => x.stage === stages.find((s) => s.id === x.id).stage), "a refused bulk move moved someone");
+    const moved = await call("move_stage", a, { application_ids: two, stage: "INTERVIEW" });
+    ok(moved.moved === 2 && moved.applications.every((x) => x.stage === "INTERVIEW"), "the bulk move didn't move both");
+    for (const x of stages) await db.application.update({ where: { id: x.id }, data: { stage: x.stage, step: x.step } });
+  });
+
   await check("a mail server that refuses leaves the draft a draft, with the reason", async () => {
     const draft = await call("save_message", a, { application_id: passing.applicationId, kind: "OTHER", body: "Hi Ana." });
     await db.mailbox.update({ where: { userId: a.id }, data: { password: "wrong-password" } });
@@ -731,6 +760,8 @@ try {
     ok(/isn't available/.test((await rpcCall(hm, "prep_message", { application_id: app2, kind: "OTHER" })).error ?? ""), "they reached a messaging tool");
     ok(!(await rpcCall(hm, "get_application", { application_id: app2 })).error, "they can't read their own job's applicant");
     ok(!(await rpcCall(hm, "move_stage", { application_id: app2, stage: "SCREEN" })).error, "they can't move their own job's applicant");
+    ok((await rpcCall(hm, "move_stage", { application_ids: [app2, app], stage: "SCREEN" })).error, "a bulk move reached an applicant on another job");
+    ok(!(await rpcCall(hm, "move_stage", { application_ids: [app2], stage: "SCREEN" })).error, "they can't bulk move their own job's applicant");
   });
 
   await check("an interviewer sees only interviews they're on, no one's verdict, and writes only their own card", async () => {
@@ -815,6 +846,9 @@ try {
     ["record_offer", { application_id: ids.application_id, title: "x" }],
     ["record_offer", { offer_id: offer.id, status: "WITHDRAWN" }],
     ["move_stage", { application_id: ids.application_id, stage: "REJECTED" }],
+    ["move_stage", { application_ids: [ids.application_id], stage: "REJECTED" }],
+    ["draft_messages", { application_ids: [ids.application_id], kind: "OTHER", body: "x", dry_run: false }],
+    ["send_message", { message_ids: [sendable] }],
     ["add_note", { application_id: ids.application_id, body: "x" }],
     ["prep_message", { application_id: ids.application_id, kind: "REJECTION" }],
     ["save_message", { application_id: ids.application_id, kind: "OTHER", body: "x" }],
