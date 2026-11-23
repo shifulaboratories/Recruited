@@ -5,7 +5,7 @@ import { reaches } from "@/lib/data/team";
 import { seesEverything } from "@/lib/team";
 import { formatPay, getJob } from "@/lib/data/jobs";
 import { applyPath, listingReport } from "@/lib/data/listings";
-import { listApplications, STAGES } from "@/lib/data/applications";
+import { listApplications } from "@/lib/data/applications";
 import { boardByKey, renderListing, toHtml } from "@/lib/boards";
 import { readQuestions } from "@/lib/forms";
 import { closeOutAction, setJobStatus, setListingStatus } from "@/server/actions";
@@ -13,6 +13,7 @@ import { closeOutJob, DEFAULT_CLOSEOUT } from "@/lib/data/closeout";
 import { ActionForm, CopyButton } from "@/components/forms";
 import { ImportApplicants } from "@/components/import-applicants";
 import { Board } from "@/components/board";
+import { StepEditor } from "@/components/step-editor";
 import { Empty, Icon, PageHeader, SectionHead } from "@/components/ui";
 import { StageChip } from "@/components/provenance";
 
@@ -71,12 +72,13 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
           <Empty icon="board" title="Nobody yet" ask={job.listings.length ? "Import last week's applicants from this Indeed export." : `Post the ${job.title} role on LinkedIn.`} />
         ) : (
           <Board
-            stages={STAGES}
+            steps={job.steps}
             cards={applications.map((a) => ({
               id: a.id,
               candidate: a.candidate,
               source: sourceLabel(a.source),
               stage: a.stage,
+              stepId: a.stepId,
               tier: a.effectiveTier,
               proposal: a.tierIsProposal,
               rank: a.proposal?.rank ?? null,
@@ -84,6 +86,14 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
               provenance: a.provenance,
             }))}
           />
+        )}
+        {full && (
+        <details className="mt-3 text-sm group">
+          <summary className="btn btn-quiet text-xs cursor-pointer">Change this job&apos;s stages</summary>
+          <div className="card p-4 mt-2">
+            <StepEditor jobId={job.id} steps={job.steps} custom={job.customSteps} />
+          </div>
+        </details>
         )}
         {full && (
         <details className="mt-3 text-sm group">

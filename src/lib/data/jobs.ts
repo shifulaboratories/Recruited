@@ -1,6 +1,7 @@
 import type { JobStatus, Prisma, Stage } from "@prisma/client";
 import { db } from "@/lib/db";
 import { notFound, UserError } from "@/lib/data/errors";
+import { checkSteps, effectiveSteps, readSteps, stepOf } from "@/lib/steps";
 
 /**
  * Jobs: the roles a workspace is hiring for. userId is the first positional
@@ -118,12 +119,33 @@ export async function getJob(userId: string, jobId: string) {
     include: {
       listings: { orderBy: [{ board: "asc" }, { variant: "asc" }] },
       forms: { orderBy: { createdAt: "asc" } },
-      applications: { where: { archivedAt: null }, select: { stage: true } },
+      applications: { where: { archivedAt: null }, select: { stage: true, step: true } },
     },
   });
   if (!job) notFound("job");
-  const { applications, ...rest } = job;
-  return { ...rest, applicants: applications.length, stages: stageCounts(applications) };
+  const { applications, steps: saved, ...rest } = job;
+  const steps = effectiveSteps(readSteps(saved));
+  const onStep = (id: string) => applications.filter((a) => stepOf(a, steps).id === id).length;
+  return {
+    ...rest,
+    applicants: applications.length,
+    stages: stageCounts(applications),
+    customSteps: readSteps(saved).length > 0,
+    steps: steps.map((s) => ({ ...s, applicants: onStep(s.id) })),
+  };
+}
+
+/**
+ * Replace a job's own stages. An empty list goes back to the six usual ones.
+ * Applicants keep their stage; one on a step that's gone shows on the first
+ * step of their stage.
+ */
+export async function setJobSteps(userId: string, jobId: string, input: { id?: string; label: string; stage: string }[]) {
+  await requireJob(userId, jobId);
+  const r = checkSteps(input);
+  if ("error" in r) throw new UserError(r.error);
+  await db.job.update({ where: { id: jobId }, data: { steps: r.steps } });
+  return effectiveSteps(r.steps);
 }
 
 export function formatPay(j: { salaryMin: number | null; salaryMax: number | null; salaryCurrency: string; salaryPeriod: string }) {

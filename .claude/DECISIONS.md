@@ -405,3 +405,25 @@ resets their account, not the owner's.
 The mailbox stays one per workspace, connected by the owner. A recruiter's Send goes out
 from it. Per-person mailboxes can come later if a team asks; the send rules don't change.
 Prompts are hidden from narrow roles, because each one composes tools they don't have.
+
+## 2026-11-23 — A job's own stages sit inside the six fixed ones
+
+Roadmap item 22. Teams name their own steps ("Phone screen", "Trial task", "Founder
+call"), but the six stages carry meaning the rest of the app depends on: the applicant's
+status page says closed only from REJECTED, close-out moves people there, the brief looks
+for SCREEN without a screening form, and reports will count by stage. So a step is a
+label inside a stage, not a replacement for it: `Job.steps` is `[{ id, label, stage }]`
+and `Application.step` names one, with `stage` always set alongside. Nothing that reads
+`stage` had to change.
+
+A stage with no step of its own shows under its usual name, so every job always has a
+column for every stage and HIRED and REJECTED can't be configured away. An application
+whose step was removed, or whose stage changed without a step, shows on the first step of
+its stage; every raw stage write (re-applying, close-out) sets `step` to null for that
+reason. Custom ids are lowercase slugs and default ids are the stage names, so they can't
+collide, and `move_stage`'s `step` accepts either, or the step's name in any case.
+
+No new tool: `update_job` gained `stages`, which replaces the list (the description says
+read `get_job` first and send ids back, and an eval case guards the trap), and
+`move_stage` gained `step`. Per-stage automations (send this form when someone reaches
+"Trial task") are a later item; the step id is what they'd key on.

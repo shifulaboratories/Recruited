@@ -4,7 +4,7 @@ import { baseUrl, requireSeat } from "@/lib/auth";
 import { listTeam, reaches } from "@/lib/data/team";
 import { ROLE_LABEL, seesEverything } from "@/lib/team";
 import { listReferences } from "@/lib/data/references";
-import { getApplication, STAGES, TIERS } from "@/lib/data/applications";
+import { getApplication, TIERS } from "@/lib/data/applications";
 import { boardByKey } from "@/lib/boards";
 import { filePath } from "@/lib/data/uploads";
 import type { StyleSignal } from "@/lib/provenance";
@@ -100,11 +100,11 @@ export default async function ApplicationPage({ params }: { params: Promise<{ id
         </div>
         <div className="basis-full">
           <div className="seg" role="group" aria-label="Stage">
-            {STAGES.map((s) => (
-              <form key={s} action={moveStage.bind(null, a.id, s)}>
-                <button aria-pressed={a.stage === s} className="inline-flex items-center gap-1.5" style={{ ["--tone" as string]: STAGE_TONE[s] }}>
-                  {a.stage === s && <span className="dot" />}
-                  {STAGE_LABEL[s]}
+            {a.jobSteps.map((s) => (
+              <form key={s.id} action={moveStage.bind(null, a.id, s.stage, s.id)}>
+                <button aria-pressed={a.stepId === s.id} className="inline-flex items-center gap-1.5" style={{ ["--tone" as string]: STAGE_TONE[s.stage] }}>
+                  {a.stepId === s.id && <span className="dot" />}
+                  {s.label}
                 </button>
               </form>
             ))}
